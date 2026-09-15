@@ -4,7 +4,11 @@ Public download and product page for [AI Agent Quota Dashboard](https://github.c
 
 Live site: <https://aiqd.tonimakes.com>
 
+Current public release: `v0.1.0`, an unsigned Windows x64 preview. Users should verify the SHA256 shown on the GitHub Release before running the installer.
+
 The site is a small dependency-free HTML/CSS/JavaScript page. The download buttons point to the latest GitHub Release; the Windows installer and its SHA256 checksum are published in the software repository rather than copied into this website repository.
+
+Public-content rule: keep this repository limited to product copy, sanitized demo screenshots, and public release links. Do not add account data, local paths, raw logs, prompts, source code, credentials, cookies, tokens, or private deployment details.
 
 ## Local build
 
