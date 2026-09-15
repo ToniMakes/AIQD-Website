@@ -1,20 +1,29 @@
 # Project Status
 
-Last updated: 2026-08-25
+Last updated: 2026-09-16
 
-AI Agent Quota Dashboard is in a v0.1 desktop-preview stage. The core MVP is no longer just a scaffold: the local dashboard, desktop tray shell, real-data setup flow, and strict trial readiness checks are implemented and passing CI. The first public preview target is now installer-first for normal users, with source mode retained as a developer fallback.
+AI Agent Quota Dashboard is in a v0.1 desktop-preview stage. The local dashboard, desktop tray shell, real-data setup flow, and strict trial readiness checks are implemented and passing CI. The first public preview target is installer-first for normal users, with source mode retained as a developer fallback.
 
 ## Current Capability
 
 - Local Node.js service bound to `127.0.0.1`
 - SQLite persistence for normalized quota snapshots, reset events, and refresh runs
-- Codex quota detection from local CLI `rate_limits` events, with a manual visible-status fallback
+- Codex quota detection from local CLI `rate_limits` events; the packaged Settings flow is automatic-only and directs users to use Codex once, then refresh
+- Codex reset-credit detection from structured local app-server records and trusted Codex usage-limit tool results, with read-only dashboard details, mini-panel summary, and optional in-app expiry reminders
+- Codex reset-credit reminders support both preset intervals and a custom 1–30 day interval
+- Local HTTP responses include a restrictive Content Security Policy and standard browser hardening headers
+- Concurrent refresh requests are coalesced, and unexpected HTTP errors return a generic production-safe message
+- Local candidate discovery keeps memory bounded when provider files grow during a scan and handles global filename patterns safely
+- Open-source maintenance now includes pinned GitHub Actions, production dependency auditing, and SBOM artifacts
+- Versioned releases now use a tag-only Windows workflow that validates `package.json`, generates installer checksums, and publishes release assets
+- Packaged desktop builds can show a real Windows notification through the Electron bridge, with a Settings test action; scheduled reminder delivery remains future work
+- Subscription-tier labels in the main agent card header when local data exposes a reliable tier, including Codex `planType` and Claude local credentials `subscriptionType`
 - Codex display/export surfaces hide unsupported monthly buckets and expose only the adapter-supported 5-hour and weekly windows
 - Claude Code quota ingestion from official statusline `rate_limits`
 - Claude Desktop quota ingestion from local `plan-usage-history.json`, an alternative to Claude Code so the CLI is not required
 - Real-data readiness passes the `anthropic` provider group when either Claude Code or Claude Desktop is fresh
 - Beginner Claude setup flow with explicit install and connect actions
-- Dashboard, Doctor, Settings, reset timeline, refresh history, and local export views
+- Dashboard, Diagnostics, Settings, reset timeline, refresh history, and local export views
 - Strict real-data readiness checks shared by CLI, Settings, tray, and mini surfaces
 - Electron desktop shell with tray mini panel, always-on-top widget, safe AIQD-only shortcuts, and first-run deep links
 - Dashboard and mini quota cards hide duplicate primary-window rows while keeping extra windows, such as Claude Code's 5-hour quota, visible as progress rows
@@ -34,7 +43,7 @@ AI Agent Quota Dashboard is in a v0.1 desktop-preview stage. The core MVP is no 
 
 AIQD only uses official or local user-visible quota sources. It does not read browser cookies, simulate login, call hidden APIs, upload prompts/responses/source code, or automate account switching. If a reliable source is unavailable, the UI should say `unavailable` or use an explicitly labeled manual fallback.
 
-The preferred Windows signing path remains SignPath Foundation open-source signing. SignPath review is still pending, so the maintainer explicitly approved publishing v0.1.0 as an unsigned desktop preview on 2026-08-25 with prominent warning copy and a SHA256 in the GitHub Release.
+The preferred Windows signing path remains SignPath Foundation open-source signing. SignPath review is still pending, so the maintainer explicitly approved publishing v0.1.0 as an unsigned desktop preview on 2026-09-16 with prominent warning copy and a SHA256 in the GitHub Release.
 
 ## Latest Local Verification
 
@@ -59,7 +68,17 @@ The current maintainer checkout has passed:
 - Maintainer-profile desktop and Start menu entries were refreshed to the latest installed packaged executable after the `v0.1.0-rc.3` build
 - Maintainer-profile desktop and Start menu entries were refreshed again on 2026-08-21 after the Codex monthly-window hiding and desktop `EPIPE` fix; a hidden-window installed-app smoke exited `0`
 - Clean-copy trial from `.tmp/fresh-trial-v0.1.0-rc.1`: `npm ci`, `npm test`, `npm run desktop:smoke`, `npm run desktop:first-run-smoke`, `npm run trial:preflight`, `npm run trial:ready`, and browser/API smoke
+- 2026-08-26 internal-quality pass (dashboard/mini-panel dedup into `web/shared.js`, Claude CLI environment and provider-manifest extraction): `npm run typecheck`, `npm test` (173 tests), and `npm run desktop:smoke`
+- 2026-09-15 Codex dashboard and reminder UX pass: `npm test` (195 tests), `node --check web/app.js`, `node --check web/mini.js`, and `git diff --check`; dashboard and mini surfaces now prefer the supported 5-hour quota window and support custom reset-credit reminder intervals from 1 to 30 days
+- 2026-09-16 release-hardening pass: enabled Electron ASAR packaging, added local HTTP security headers, coalesced concurrent refreshes, and sanitized unexpected HTTP 500 responses; `npm test`, desktop smoke, packaged smoke, `npm run package:win:dir`, and `npm run package:win` completed successfully.
+- 2026-09-16 P1 product-quality pass: added bounded local-file scan coverage, provider compatibility/data-quality documentation, and edge-case tests for oversized files and global filename patterns.
+- 2026-09-16 P1 open-source engineering pass: added action SHA pinning, dynamic packaging version resolution, CI production audit/SBOM generation, and dependency supply-chain documentation. Automated Dependabot and CODEOWNERS configuration was removed after causing excessive review notifications.
+- 2026-09-16 desktop UX pass: removed manual Codex entry from packaged Settings, added realistic native notification test copy, and aligned desktop action rows using runtime measurement
+- 2026-09-16 v0.1.0 unsigned Windows preview was published from tag `v0.1.0`; the release workflow passed tests, desktop smoke, installer packaging, packaged smoke, signature-state validation, and asset upload. The published installer SHA256 is `B50901B8AF4F9A07CAF9085143B229E3FC3FE76D63F3F600F1CDE6290DD5721C`.
 - GitHub Actions CI on `main`
+- Tag-driven Windows release automation now validates package version, creates
+  installer SHA256 files, and publishes the installer plus checksum as release
+  assets.
 
 ## Latest Clean Trial Notes
 
@@ -69,9 +88,9 @@ The latest local readiness run reports Codex ready from `official_cli`, Claude D
 
 The beginner real-data trial docs now call out expected command results, Windows PowerShell `npm.cmd` fallbacks, Codex automatic-versus-manual detection, and Claude Code stale-snapshot recovery.
 
-Demo release screenshots have been refreshed for the dashboard, Doctor, Settings setup flow with Claude Desktop, mini panel, and widget surfaces under `docs/assets/screenshots`.
+Demo release screenshots have been refreshed for the dashboard, Diagnostics, Settings setup flow with Claude Desktop, mini panel, and widget surfaces under `docs/assets/screenshots`.
 
-The first public preview distribution shape is installer-first desktop preview. The Windows x64 NSIS artifact is generated at `release/AI Agent Quota Dashboard-0.1.0-win-x64.exe`; `release/` is ignored and the artifact should be uploaded to a GitHub Release rather than committed. The v0.1.0 artifact is intentionally unsigned while SignPath review is pending. `docs/release-notes-v0.1.0.md` is the GitHub Release text.
+The first public preview distribution shape is installer-first desktop preview. The Windows x64 NSIS artifact is generated at `release/AI Agent Quota Dashboard-0.1.0-win-x64.exe`; `release/` is ignored and the artifact is published to the [v0.1.0 GitHub Release](https://github.com/ToniMakes/ai-agent-quota-dashboard/releases/tag/v0.1.0) rather than committed. The v0.1.0 artifact is intentionally unsigned while SignPath review is pending. `docs/release-notes-v0.1.0.md` is the release-notes source.
 
 The unsigned `v0.1.0-rc.1` GitHub Pre-release has been created for clean-machine testing and SignPath Foundation review. A copy-paste application draft is available in [docs/signpath-application.md](signpath-application.md).
 
@@ -106,7 +125,7 @@ The fix uses the full product name for Electron app data, enables NSIS app-data 
 
 The mini panel now shows `reset` / `重置` only for real reset timestamps, uses `refresh` / `刷新` for local freshness deadlines, and shows both 5h and weekly timing on the merged Claude card. The clean Windows uninstall retest remains relevant and should now use the latest RC installer.
 
-`v0.1.0` is approved for an unsigned desktop preview because SignPath Foundation review is still pending after the application submitted on 2026-08-14. The final local installer artifact built on 2026-08-25 is unsigned (`Get-AuthenticodeSignature` reports `NotSigned`) and has SHA256 `7DDE28E8FE424268C752480889DBBEABFD5578D9D20D5EE77DAE117ADE867F6D`.
+`v0.1.0` is approved for an unsigned desktop preview because SignPath Foundation review is still pending after the application submitted on 2026-08-14. The published installer artifact built on 2026-09-16 is unsigned (`Get-AuthenticodeSignature` reports `NotSigned`) and has SHA256 `B50901B8AF4F9A07CAF9085143B229E3FC3FE76D63F3F600F1CDE6290DD5721C`.
 
 ## Current Product State
 
@@ -120,5 +139,5 @@ Claude Desktop-only coverage was the highest product priority before broad publi
 
 ## Next Focus
 
-1. Run final local release checks, package the unsigned v0.1.0 installer, compute SHA256, and publish the GitHub Release.
-2. After SignPath approval, configure GitHub secrets/variables and rerun the Windows package workflow with signing enabled for a follow-up signed release.
+1. Optional post-release work: run the documented clean Windows profile or VM trial if broader distribution confidence is needed.
+2. After SignPath approval, configure GitHub secrets/variables and publish a separate signed follow-up release; do not silently replace the unsigned v0.1.0 asset.

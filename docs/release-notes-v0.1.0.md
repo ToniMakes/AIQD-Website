@@ -29,12 +29,12 @@ On Windows PowerShell, if `npm` is blocked by the local execution policy, use `n
 
 Launch-at-login is not a hidden side effect. The installer checkbox is off by default, and the same startup entry can be enabled or disabled later from Settings > Desktop Preferences.
 
-Signature status: **unsigned Windows installer**. SignPath Foundation open-source signing is still pending as of 2026-08-25, and the maintainer has explicitly approved publishing v0.1.0 as an unsigned desktop preview instead of blocking the release. Windows may show an unknown-publisher or SmartScreen warning.
+Signature status: **unsigned Windows installer**. SignPath Foundation open-source signing is still pending as of 2026-09-16, and the maintainer has explicitly approved publishing v0.1.0 as an unsigned desktop preview instead of blocking the release. Windows may show an unknown-publisher or SmartScreen warning.
 
 SHA256:
 
 ```text
-7DDE28E8FE424268C752480889DBBEABFD5578D9D20D5EE77DAE117ADE867F6D
+B50901B8AF4F9A07CAF9085143B229E3FC3FE76D63F3F600F1CDE6290DD5721C
 ```
 
 Code signing policy: [docs/code-signing.md](https://github.com/ToniMakes/ai-agent-quota-dashboard/blob/main/docs/code-signing.md).
@@ -117,7 +117,7 @@ CI runs tests on Windows and Ubuntu with Node 24.
 ## Known Limits
 
 - The v0.1.0 Windows installer is unsigned while SignPath Foundation review is pending; users should verify the SHA256 before running it
-- No system notification support yet
+- Scheduled system reminder delivery is not part of this preview; packaged builds include a native notification bridge and a Settings preview action
 - No update channel yet
 - Launch-at-login is Windows-first for this preview; macOS/Linux distribution polish remains later work
 - Claude Code may report setup warnings until it renders a fresh statusline payload; this no longer blocks Claude readiness when Claude Desktop is available
@@ -127,6 +127,6 @@ CI runs tests on Windows and Ubuntu with Node 24.
 
 ## Privacy Boundary
 
-AIQD does not read browser cookies, collect passwords, simulate login, call hidden APIs, bypass rate limits, switch accounts, or upload prompts, responses, source code, chat content, credentials, or raw local logs.
+AIQD is local-first; see [docs/privacy.md](https://github.com/ToniMakes/ai-agent-quota-dashboard/blob/main/docs/privacy.md) for the full data boundary.
 
 Exports and public dashboard APIs exclude account identifiers and raw local source references. If reliable quota data is unavailable, the app should show `unavailable` or an explicitly labeled manual fallback.

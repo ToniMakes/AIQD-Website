@@ -1,10 +1,10 @@
 # Roadmap
 
-Last updated: 2026-08-25
+Last updated: 2026-09-12
 
-## Current Milestone: v0.1 Desktop Preview
+## Current Milestone: Signed Follow-Up Release
 
-The v0.1 MVP is in real-data dogfooding. The goal is to make the local Codex and Claude quota experience trustworthy enough for early public testers, with an installer-first path for normal users and source mode retained for developers.
+`v0.1.0` shipped 2026-08-25 as an installer-first desktop preview, unsigned while SignPath Foundation review is pending. The current milestone is closing the gaps that block the next, signed release: a true clean-machine trial and a signed installer.
 
 ### Done
 
@@ -14,8 +14,9 @@ The v0.1 MVP is in real-data dogfooding. The goal is to make the local Codex and
 - Claude Code setup helper, readiness checks, and first-data waiting states
 - Codex structured quota parser and automatic local CLI `rate_limits` detection
 - Manual Codex visible-status fallback with expiry at reported reset time
+- Read-only Codex reset-credit display and in-app expiry reminders when structured local Codex data exposes current reset credits
 - SQLite snapshot, reset event, and refresh run storage
-- Localhost Web Dashboard, Doctor, Settings, reset timeline, and refresh history
+- Localhost Web Dashboard, Diagnostics, Settings, reset timeline, and refresh history
 - Source confidence, stale state, low quota state, and reported-reset labels
 - JSON and CSV export with private identifiers and raw source references excluded
 - Strict real-data readiness shared by CLI, Settings, tray, and mini surfaces
@@ -24,34 +25,25 @@ The v0.1 MVP is in real-data dogfooding. The goal is to make the local Codex and
 - Packaged desktop smoke checks that run without requiring system Node.js
 - Opt-in packaged launch-at-login with installer checkbox, Settings toggle, background tray startup, and uninstall cleanup
 - Safe AIQD-only global shortcuts for mini panel, refresh, and widget
-- One-time first-run desktop guide with deep links to exact setup or Doctor sections
+- One-time first-run desktop guide with deep links to exact setup or Diagnostics sections
 - English-by-default Chinese/English language switching in the main dashboard and mini surfaces
 - Collapsible first-run Settings details behind the Codex and Claude setup buttons
 - Dashboard and mini quota cards hide duplicate primary-window rows and use separate progress rows for extra windows such as Claude Code's 5-hour quota
-- Demo release screenshots refreshed for the dashboard, Doctor, Settings setup flow with Claude Desktop, mini panel, and widget surfaces
+- Demo release screenshots refreshed for the dashboard, Diagnostics, Settings setup flow with Claude Desktop, mini panel, and widget surfaces
 - Beginner Claude Code setup flow that separates `Install Claude Code CLI` from `Connect Claude data`
 - Technical Claude statusline commands hidden behind advanced details in the normal setup flow
 - Claude Desktop local `plan-usage-history.json` adapter, an alternative Claude source that needs no CLI install
 - Real-data readiness treats Claude Code and Claude Desktop as alternatives (any-of per provider) instead of both being mandatory
 - CI on Windows and Ubuntu with Node 24
+- Created the GitHub Release and uploaded the unsigned `v0.1.0` installer artifact
 
-### Remaining Before First Public Preview
+### Remaining Before a Signed Follow-Up Release
 
 - True clean Windows user or VM real-data trial from installer to Codex, Claude Desktop, and Claude Code readiness
-- SignPath Foundation approval, CI signing configuration, and final signed-installer verification for a later signed follow-up release
+- SignPath Foundation approval, CI signing configuration, and final signed-installer verification
 - Beginner onboarding copy pass for Windows, macOS, and Linux
-- Create the GitHub Release and upload the unsigned installer artifact after final verification
 
-### First Preview Work Plan
-
-1. Hardening: keep smoke checks deterministic, verify `npm test`, `desktop:smoke`, `desktop:first-run-smoke`, and `git diff --check` locally.
-2. Packaging: keep the Windows installer artifact reproducible and verify packaged smoke checks before each tag.
-3. Claude Desktop coverage: the adapter parsing local plan usage samples from `%APPDATA%\Claude\plan-usage-history.json` is implemented; verify it end-to-end on a clean machine alongside Codex and Claude Code.
-4. Real-data trial: run a fresh install from installer to Codex, Claude Desktop, and Claude Code readiness, recording every point where setup copy is confusing.
-5. Developer fallback: verify a clean clone still works for technical testers.
-6. Onboarding pass: tighten Settings and README instructions around the next action, expected result, and recovery path for each platform.
-7. Release assets: capture dashboard, tray mini panel, widget, and setup-flow screenshots or short GIFs.
-8. Release finish: publish v0.1.0 as an explicitly unsigned desktop preview, update `CHANGELOG.md`, complete `docs/release-checklist.md`, verify CI on `main`, tag the preview, and create the GitHub Release.
+See [Release Checklist](release-checklist.md) for the step-by-step work plan.
 
 ## v0.2
 
@@ -59,7 +51,7 @@ The v0.1 MVP is in real-data dogfooding. The goal is to make the local Codex and
 - Settings-controlled automatic refresh interval presets: manual, 15 seconds, 30 seconds, 1 minute, 5 minutes, and 15 minutes; label this as local refresh cadence because actual quota observation depends on Codex or Claude Code producing new data
 - Settings safety reset: a `Restore default settings` action for AIQD-owned preferences only, such as language, refresh cadence, shortcut overrides, launch-at-login preference, and remembered window/widget positions
 - Separate advanced actions for destructive or external changes, such as clearing local quota history or disconnecting Claude Code data capture; these must require explicit confirmation and must not be bundled into the normal defaults reset
-- System notification for low quota, stale data, and refresh warnings
+- Automatic system notification scheduling for low quota, stale data, and refresh warnings (the native notification bridge and Settings preview are already available)
 - Simple historical usage trend from stored snapshots and refresh runs
 - Reset rhythm statistics from observed reset events: recent reset times, intervals, average/median/min/max spacing, and replenishment deltas, always labeled as local observations rather than guaranteed provider schedules
 - Optional forecast based on observed usage habits
@@ -76,9 +68,6 @@ The v0.1 MVP is in real-data dogfooding. The goal is to make the local Codex and
 
 ## Non-goals
 
-- Browser cookie import
-- Automatic login
-- Hidden API scraping
-- Multi-account limit avoidance
-- Prompt, response, transcript, or source-code upload
 - Team management in the personal MVP
+
+See the [README Non-goals](../README.md#non-goals) for the project's privacy/data-access non-goals.

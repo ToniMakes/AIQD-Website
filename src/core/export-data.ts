@@ -129,11 +129,17 @@ export function sanitizeAgentSummary(agent: AgentSummary): PublicAgentSummary {
   };
 
   if (agent.emptyState !== undefined) sanitized.emptyState = agent.emptyState;
+  if (agent.subscriptionTier !== undefined) {
+    sanitized.subscriptionTier = agent.subscriptionTier;
+  }
   if (agent.primarySnapshot !== undefined) {
     sanitized.primarySnapshot = sanitizeAgentQuotaSnapshot(agent.primarySnapshot);
   }
   if (agent.lastObservedAt !== undefined) {
     sanitized.lastObservedAt = agent.lastObservedAt;
+  }
+  if (agent.resetCredits !== undefined) {
+    sanitized.resetCredits = agent.resetCredits;
   }
 
   return sanitized;

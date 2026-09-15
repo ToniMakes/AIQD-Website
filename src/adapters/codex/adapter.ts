@@ -1,21 +1,34 @@
-import { open, readdir, stat } from "node:fs/promises";
+import { createReadStream } from "node:fs";
+import { readdir, stat } from "node:fs/promises";
 import { homedir } from "node:os";
 import { basename, join } from "node:path";
-import type { AgentAdapter, AdapterScanContext } from "../contracts.js";
+import { createInterface } from "node:readline";
+import type {
+  AgentAdapter,
+  AdapterScanContext,
+  CommonAdapterOptions
+} from "../contracts.js";
 import { findReadableCandidateFiles } from "../local-candidates.js";
-import { inspectPath, uniquePaths } from "../path-utils.js";
+import { inspectPath, resolveDataPaths, uniquePaths } from "../path-utils.js";
 import {
   defaultCodexManualSnapshotPath,
   defaultCodexSnapshotDir
 } from "../../config/paths.js";
-import type { DoctorCheck, QuotaSnapshot } from "../../core/types.js";
-import { parseCodexQuotaSnapshots } from "./parse-quota-snapshot.js";
+import type {
+  CodexResetCredit,
+  DoctorCheck,
+  QuotaSnapshot
+} from "../../core/types.js";
+import {
+  parseCodexQuotaSnapshots,
+  parseCodexResetCredits
+} from "./parse-quota-snapshot.js";
 
-export type CodexAdapterOptions = {
-  configuredDataPaths?: string[];
-  demoMode: boolean;
+export type CodexAdapterOptions = CommonAdapterOptions & {
   includeDefaultDataPaths?: boolean;
 };
+
+export const codexDisplayName = "Codex";
 
 type CodexCandidateFile = {
   path: string;
@@ -28,9 +41,15 @@ type CodexSessionLogCandidate = {
   size: number;
 };
 
+type CodexScanData = {
+  resetCredits: CodexResetCredit[];
+  snapshots: QuotaSnapshot[];
+  subscriptionTier?: string;
+};
+
 const maxCodexSessionDepth = 5;
 const maxCodexSessionLogs = 24;
-const maxCodexSessionTailBytes = 512 * 1024;
+const maxCodexSessionFilteredBytes = 1024 * 1024;
 
 export function createCodexAdapter(options: CodexAdapterOptions): AgentAdapter {
   const defaultDataPaths =
@@ -42,7 +61,7 @@ export function createCodexAdapter(options: CodexAdapterOptions): AgentAdapter {
     manifest: {
       provider: "openai",
       agent: "codex",
-      displayName: "Codex",
+      displayName: codexDisplayName,
       shortName: "Codex",
       description: "OpenAI Codex local session and quota snapshots.",
       defaultDataPaths,
@@ -52,12 +71,16 @@ export function createCodexAdapter(options: CodexAdapterOptions): AgentAdapter {
       const checks: DoctorCheck[] = [];
       const inspections = await Promise.all(defaultDataPaths.map(inspectPath));
       const readableRoots = inspections.filter((inspection) => inspection.readable);
-      const snapshots = options.demoMode
-        ? [createDemoCodexSnapshot(context.now)]
-        : await readCodexQuotaSnapshots(
+      const scanData = options.demoMode
+        ? {
+            resetCredits: [],
+            snapshots: [createDemoCodexSnapshot(context.now)]
+          }
+        : await readCodexData(
             readableRoots.map((inspection) => inspection.path),
             context
           );
+      const { resetCredits, snapshots } = scanData;
 
       for (const inspection of inspections) {
         checks.push({
@@ -90,6 +113,10 @@ export function createCodexAdapter(options: CodexAdapterOptions): AgentAdapter {
 
       return {
         snapshots,
+        resetCredits,
+        ...(scanData.subscriptionTier
+          ? { subscriptionTier: scanData.subscriptionTier }
+          : {}),
         usageEvents: [],
         doctorChecks: checks
       };
@@ -111,13 +138,13 @@ export function getDefaultCodexDataPaths(): string[] {
 }
 
 export function resolveCodexDataPaths(configuredDataPaths: string[] = []): string[] {
-  return uniquePaths([...getDefaultCodexDataPaths(), ...configuredDataPaths]);
+  return resolveDataPaths(getDefaultCodexDataPaths(), configuredDataPaths);
 }
 
-async function readCodexQuotaSnapshots(
+async function readCodexData(
   roots: string[],
   context: AdapterScanContext
-): Promise<QuotaSnapshot[]> {
+): Promise<CodexScanData> {
   const structuredCandidates = await findReadableCandidateFiles(roots, {
     namePattern:
       /(?:quota|snapshot|status|usage[-_]?limits?|limits?).*\.(?:jsonl?|txt)$/i
@@ -127,8 +154,7 @@ async function readCodexQuotaSnapshots(
     ...structuredCandidates,
     ...sessionCandidates
   ]);
-
-  return bestSnapshotPerWindow(
+  const snapshots = bestSnapshotPerWindow(
     candidates.flatMap((candidate) =>
       parseCodexQuotaSnapshots(candidate.content, {
         observedAt: context.now,
@@ -137,6 +163,22 @@ async function readCodexQuotaSnapshots(
     ),
     context.now
   );
+
+  const subscriptionTier = readSubscriptionTierFromSnapshots(snapshots);
+
+  return {
+    resetCredits: latestAvailableResetCredits(
+      candidates.flatMap((candidate) =>
+        parseCodexResetCredits(candidate.content, {
+          observedAt: context.now,
+          rawSourceRef: candidate.path
+        })
+      ),
+      context.now
+    ),
+    snapshots,
+    ...(subscriptionTier ? { subscriptionTier } : {})
+  };
 }
 
 async function findCodexSessionLogCandidates(
@@ -154,7 +196,7 @@ async function findCodexSessionLogCandidates(
       .slice(0, maxCodexSessionLogs)
       .map(async (candidate) => ({
         path: candidate.path,
-        content: await readFileTail(candidate.path, candidate.size)
+        content: await readRelevantSessionLogLines(candidate.path)
       }))
   );
 }
@@ -229,18 +271,46 @@ function isCodexSessionLogName(name: string): boolean {
   return /^rollout-.+\.jsonl$/i.test(name);
 }
 
-async function readFileTail(path: string, size: number): Promise<string> {
-  const bytesToRead = Math.min(size, maxCodexSessionTailBytes);
-  const position = Math.max(0, size - bytesToRead);
-  const buffer = Buffer.alloc(bytesToRead);
-  const file = await open(path, "r");
+async function readRelevantSessionLogLines(path: string): Promise<string> {
+  const lines: string[] = [];
+  let bytes = 0;
+  const reader = createInterface({
+    crlfDelay: Infinity,
+    input: createReadStream(path, {
+      encoding: "utf8"
+    })
+  });
 
-  try {
-    const result = await file.read(buffer, 0, bytesToRead, position);
-    return buffer.subarray(0, result.bytesRead).toString("utf8");
-  } finally {
-    await file.close();
+  for await (const line of reader) {
+    if (!isRelevantCodexSessionLogLine(line)) {
+      continue;
+    }
+
+    bytes += Buffer.byteLength(line, "utf8") + 1;
+
+    if (bytes > maxCodexSessionFilteredBytes) {
+      break;
+    }
+
+    lines.push(line);
   }
+
+  return lines.join("\n");
+}
+
+function isRelevantCodexSessionLogLine(line: string): boolean {
+  return (
+    line.includes('"rate_limits"') ||
+    line.includes('"rateLimits"') ||
+    line.includes('"rateLimitsByLimitId"') ||
+    line.includes('"rateLimitResetCredits"') ||
+    line.includes('"rate_limit_reset_credits"') ||
+    (
+      line.includes('"type":"McpToolCall"') &&
+      line.includes('"server":"codex_app"') &&
+      line.includes('"tool":"get_usage_limits"')
+    )
+  );
 }
 
 function dedupeCandidates(candidates: CodexCandidateFile[]): CodexCandidateFile[] {
@@ -304,6 +374,52 @@ function isExpiredByReset(snapshot: QuotaSnapshot, now: Date): boolean {
   return typeof expiresAtMs === "number" && expiresAtMs <= now.getTime();
 }
 
+function latestAvailableResetCredits(
+  credits: CodexResetCredit[],
+  now: Date
+): CodexResetCredit[] {
+  const activeCredits = credits.filter((credit) => {
+    const expiresAtMs = Date.parse(credit.expiresAt);
+    return Number.isFinite(expiresAtMs) && expiresAtMs > now.getTime();
+  });
+
+  if (activeCredits.length === 0) {
+    return [];
+  }
+
+  const latestObservedAt = Math.max(
+    ...activeCredits
+      .map((credit) => Date.parse(credit.observedAt))
+      .filter((timestamp) => Number.isFinite(timestamp))
+  );
+
+  return dedupeResetCredits(
+    activeCredits.filter(
+      (credit) => Date.parse(credit.observedAt) === latestObservedAt
+    )
+  ).sort((left, right) => Date.parse(left.expiresAt) - Date.parse(right.expiresAt));
+}
+
+function dedupeResetCredits(credits: CodexResetCredit[]): CodexResetCredit[] {
+  const seen = new Set<string>();
+
+  return credits.filter((credit) => {
+    const key = [
+      credit.resetType,
+      credit.title,
+      credit.grantedAt ?? "",
+      credit.expiresAt
+    ].join(":");
+
+    if (seen.has(key)) {
+      return false;
+    }
+
+    seen.add(key);
+    return true;
+  });
+}
+
 function sourcePriority(source: string): number {
   switch (source) {
     case "official_api":
@@ -317,6 +433,56 @@ function sourcePriority(source: string): number {
     default:
       return 0;
   }
+}
+
+function readSubscriptionTierFromSnapshots(
+  snapshots: QuotaSnapshot[]
+): string | undefined {
+  for (const snapshot of snapshots) {
+    const tier = normalizeSubscriptionTier(snapshot.planLabel);
+
+    if (tier) {
+      return tier;
+    }
+  }
+
+  return undefined;
+}
+
+function normalizeSubscriptionTier(value: string | undefined): string | undefined {
+  const normalized = value
+    ?.trim()
+    .toLowerCase()
+    .replaceAll("_", " ")
+    .replaceAll("-", " ");
+  const compact = normalized?.replace(/\s+/g, "");
+
+  if (!normalized || !compact) {
+    return undefined;
+  }
+
+  if (compact.includes("prolite")) {
+    return "Pro Lite";
+  }
+
+  const knownTiers: Array<[string, string]> = [
+    ["enterprise", "Enterprise"],
+    ["business", "Business"],
+    ["team", "Team"],
+    ["premium", "Premium"],
+    ["max", "Max"],
+    ["plus", "Plus"],
+    ["pro", "Pro"],
+    ["free", "Free"]
+  ];
+
+  for (const [token, label] of knownTiers) {
+    if (new RegExp(`(^|[^a-z])${token}([^a-z]|$)`).test(normalized)) {
+      return label;
+    }
+  }
+
+  return undefined;
 }
 
 function windowPriority(windowType: string): number {

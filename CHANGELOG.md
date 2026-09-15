@@ -6,9 +6,64 @@ This project follows semantic versioning loosely while it is pre-1.0: minor vers
 
 ## [Unreleased]
 
-No unreleased changes.
+## [0.1.0] - 2026-09-16
 
-## [0.1.0] - 2026-08-25
+Unsigned Windows preview release containing the release-hardening, product-quality,
+and release automation improvements documented below.
+
+### Added
+
+- Added inline subscription-tier metadata in the main agent card header when local data exposes a reliable tier, including Codex `planType` and Claude local credentials `subscriptionType`
+- Added read-only Codex reset credit parsing, storage, dashboard details, mini-panel summary, and multi-select in-app expiry reminders
+- Added a custom Codex reset-credit reminder interval from 1 to 30 days
+- Added security headers for the local dashboard and API responses
+- Added compatibility and data-quality notes for supported local provider sources
+- Added pinned GitHub Actions, production dependency audit, and CycloneDX SBOM generation in CI
+- Added tag-only Windows release automation with package-version validation and SHA256 asset generation
+- Added repeatable `audit:production` and `sbom` npm scripts for local supply-chain checks
+- Added a Windows-native notification bridge and a Settings action for previewing a realistic Codex reset-credit reminder
+
+### Changed
+
+- Renamed the Doctor tab to Diagnostics and rewrote its checklist and Settings setup copy for non-technical users
+- Restructured Settings and Diagnostics: one status row per app (Codex/Claude) instead of several stacked panels repeating the same connection state, with a single collapsed "technical details" layer per app for raw per-source data
+- Merged the separate Claude Code CLI and Claude Desktop panels into one Claude status row; deep-linking into a collapsed section now auto-expands it
+- Removed the CLI commands and environment-variable reference from Advanced Settings > Local Data Paths/Desktop Shortcuts that a packaged desktop install has no way to run
+- Replaced remaining internal jargon shown directly to users ("rate_limits", "statusline", "/status", generic "setup 1/2" labels) with plain language in the main window and the tray mini panel
+- Reset history and recent-changes lists now show the unified "Claude" name instead of the raw "Claude Code" source label
+- Reworked the Desktop Preferences panel: its two settings rows now sit inside a bordered group visually distinct from the section heading, and wide-window rows no longer stretch labels and controls far apart
+- Increased the page's outer margin so content doesn't sit flush against the window edge on typical (non-maximized) window widths
+- Replaced the standalone Feedback panel/button with a small footer contact line (hello@tonimakes.com) shown on every tab
+- Fixed the packaged Windows exe's publisher metadata (Toni Liu -> ToniMakes), which electron-builder pulls from `package.json`'s `author` field
+- Deduplicated onboarding-preference, quota-meter formatting, and Claude-source-selection logic between the main dashboard and the mini panel into `web/shared.js`, so both surfaces render from one implementation instead of two
+- Extracted Claude CLI detection and install-command resolution out of the statusline setup-status module into `src/setup/claude-cli-environment.ts`, replacing a string-matched winget detection with an explicit install-method field
+- Consolidated the Codex/Claude Code/Claude Desktop adapter list into a single provider manifest shared by adapter registration and the local-paths Settings view
+- Trimmed the README's Status section from a long feature-bullet list to a short summary linking to `docs/status.md`, and removed repeated privacy/setup caveats from the README and Claude Desktop docs section
+- Reorganized the dashboard refresh controls so the primary actions remain grouped while refresh timing information stays separate on narrow windows
+- Coalesced concurrent refresh requests so repeated local refresh triggers share one backend scan
+- Hardened bounded local-file discovery against provider logs that grow during a scan and global regular-expression patterns
+- Windows packaging now derives the installer path from `package.json` instead of hard-coding the version in the workflow
+- Updated dashboard and mini quota surfaces to keep 5-hour windows above weekly windows and align equivalent rows across Codex and Claude
+- Removed the Codex manual-entry form from packaged Settings; automatic detection now explains that Codex must be used once before refreshing
+- Made the startup control match the measured EN + Refresh button-row width and keep the action rows aligned on narrow windows
+
+### Fixed
+
+- Mini panel now shows the Codex 5-hour reset as the reported local clock time instead of a rounded relative distance
+- Codex 5-hour quota snapshots older than 15 minutes are now marked as needing refresh, so stale near-empty readings no longer look like current quota
+- Claude Desktop quota snapshots now infer reset timing from the local sample time and quota-window length instead of leaving reset time blank
+- Mini panel reset-credit summaries now split the count and nearest expiry onto separate lines so narrow cards do not truncate the important text
+- Codex reset credits are now discovered from trusted local `codex_app.get_usage_limits` tool results in recent session logs, and the empty state now says when no local reset-credit source was found instead of implying the account has no credits
+- Tray context menu said "Open Doctor" after the tab was renamed to Diagnostics; it now says "Open Diagnostics"
+- Mini panel now honors the user's selected Claude source (CLI vs Desktop) when picking which quota card to show, matching the main dashboard instead of always picking by recency
+- Fixed a duplicated "window" word in the 5-hour quota window tooltip
+- Fixed several Chinese translations that had drifted out of sync between the main dashboard and mini panel for the same English source string (stale-data wording, quota-source terminology, Claude Code labels)
+- Fixed a handful of untranslated hardcoded English strings in the Settings view
+- Fixed dashboard and mini-panel primary quota selection to prefer the supported 5-hour window, then weekly quota, instead of relying on adapter ordering
+- Added Codex-specific guidance when the latest local CLI quota observation is stale
+- Prevented unexpected HTTP errors from exposing raw internal exception details to local API clients
+
+## Earlier development notes (2026-08-25)
 
 First installer-first desktop preview. This release is published with an unsigned Windows x64 NSIS installer while SignPath Foundation open-source signing review is pending. The GitHub Release notes must label the artifact as unsigned and include the final SHA256.
 

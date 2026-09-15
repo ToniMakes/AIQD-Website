@@ -117,6 +117,21 @@ describe("Codex adapter paths", () => {
         sessionPath,
         [
           JSON.stringify({
+            timestamp: "2026-08-10T09:25:00.000Z",
+            result: {
+              rateLimitResetCredits: {
+                credits: [
+                  {
+                    resetType: "codexRateLimits",
+                    status: "available",
+                    expiresAt: "2026-08-20T00:00:00.000Z",
+                    title: "Old reset"
+                  }
+                ]
+              }
+            }
+          }),
+          JSON.stringify({
             timestamp: "2026-08-10T09:30:00.000Z",
             type: "event_msg",
             payload: {
@@ -151,6 +166,35 @@ describe("Codex adapter paths", () => {
                 },
                 secondary: null,
                 plan_type: "pro"
+              }
+            }
+          }),
+          JSON.stringify({
+            timestamp: "2026-08-10T09:36:00.000Z",
+            result: {
+              rateLimitResetCredits: {
+                availableCount: 2,
+                credits: [
+                  {
+                    resetType: "codexRateLimits",
+                    status: "available",
+                    grantedAt: "2026-08-01T00:00:00.000Z",
+                    expiresAt: "2026-08-18T00:00:00.000Z",
+                    title: "Full reset"
+                  },
+                  {
+                    resetType: "codexRateLimits",
+                    status: "available",
+                    expiresAt: "2026-08-19T00:00:00.000Z",
+                    title: "Full reset"
+                  },
+                  {
+                    resetType: "codexRateLimits",
+                    status: "used",
+                    expiresAt: "2026-08-20T00:00:00.000Z",
+                    title: "Full reset"
+                  }
+                ]
               }
             }
           })
@@ -193,11 +237,171 @@ describe("Codex adapter paths", () => {
       assert.equal(weeklyWindow?.remainingPercent, 39);
       assert.equal(weeklyWindow?.source, "official_cli");
       assert.equal(weeklyWindow?.observedAt, "2026-08-10T09:35:00.000Z");
+      assert.equal(result.resetCredits?.length, 2);
+      assert.equal(result.resetCredits?.[0]?.title, "Full reset");
+      assert.equal(result.resetCredits?.[0]?.expiresAt, "2026-08-18T00:00:00.000Z");
+      assert.equal(result.resetCredits?.[1]?.expiresAt, "2026-08-19T00:00:00.000Z");
       assert.equal(
         result.doctorChecks.find((check) => check.id === "codex:quota-source")
           ?.status,
         "pass"
       );
+    } finally {
+      await rm(directory, { force: true, recursive: true });
+    }
+  });
+
+  it("parses Codex usage-limit tool results from recent session logs", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "aiqd-codex-tool-"));
+
+    try {
+      const sessionPath = join(
+        directory,
+        "sessions",
+        "2026",
+        "09",
+        "12",
+        "rollout-2026-09-12T12-22-09-test.jsonl"
+      );
+      await mkdir(join(directory, "sessions", "2026", "09", "12"), {
+        recursive: true
+      });
+      await writeFile(
+        sessionPath,
+        JSON.stringify({
+          timestamp: "2026-09-12T12:22:09.368Z",
+          type: "event_msg",
+          payload: {
+            type: "item_completed",
+            item: {
+              type: "McpToolCall",
+              server: "codex_app",
+              tool: "get_usage_limits",
+              result: {
+                content: [
+                  {
+                    type: "text",
+                    text: JSON.stringify({
+                      rateLimitResetCredits: {
+                        availableCount: 1,
+                        credits: [
+                          {
+                            id: "RateLimitResetCredit_private",
+                            resetType: "codexRateLimits",
+                            status: "available",
+                            grantedAt: 1787357865,
+                            expiresAt: 1789949865,
+                            title: "Full reset",
+                            description: "private"
+                          }
+                        ]
+                      },
+                      accountId: "private"
+                    })
+                  }
+                ]
+              }
+            }
+          }
+        })
+      );
+
+      const adapter = createCodexAdapter({
+        configuredDataPaths: [directory],
+        demoMode: false,
+        includeDefaultDataPaths: false
+      });
+      const result = await adapter.scan({
+        now: new Date("2026-09-12T12:25:00.000Z")
+      });
+
+      assert.equal(result.resetCredits?.length, 1);
+      assert.equal(result.resetCredits?.[0]?.expiresAt, "2026-09-21T00:17:45.000Z");
+      assert.equal(result.resetCredits?.[0]?.observedAt, "2026-09-12T12:22:09.368Z");
+      assert.equal(Object.hasOwn(result.resetCredits?.[0] ?? {}, "id"), false);
+    } finally {
+      await rm(directory, { force: true, recursive: true });
+    }
+  });
+
+  it("parses Codex 5-hour usage-limit windows from recent session logs", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "aiqd-codex-5h-tool-"));
+
+    try {
+      const sessionPath = join(
+        directory,
+        "sessions",
+        "2026",
+        "09",
+        "14",
+        "rollout-2026-09-14T14-02-26-test.jsonl"
+      );
+      await mkdir(join(directory, "sessions", "2026", "09", "14"), {
+        recursive: true
+      });
+      await writeFile(
+        sessionPath,
+        JSON.stringify({
+          timestamp: "2026-09-14T14:02:26.532Z",
+          type: "event_msg",
+          payload: {
+            type: "item_completed",
+            item: {
+              type: "McpToolCall",
+              server: "codex_app",
+              tool: "get_usage_limits",
+              result: {
+                content: [
+                  {
+                    type: "text",
+                    text: JSON.stringify({
+                      rateLimits: {
+                        limitId: "codex",
+                        limitName: null,
+                        planType: "plus",
+                        primary: {
+                          usedPercent: 65,
+                          windowDurationMins: 300,
+                          resetsAt: 1789395715
+                        },
+                        secondary: {
+                          usedPercent: 10,
+                          windowDurationMins: 10080,
+                          resetsAt: 1789982515
+                        }
+                      },
+                      accountId: "private"
+                    })
+                  }
+                ]
+              }
+            }
+          }
+        })
+      );
+
+      const adapter = createCodexAdapter({
+        configuredDataPaths: [directory],
+        demoMode: false,
+        includeDefaultDataPaths: false
+      });
+      const result = await adapter.scan({
+        now: new Date("2026-09-14T14:05:00.000Z")
+      });
+      const sessionWindow = result.snapshots.find(
+        (snapshot) => snapshot.windowType === "session_5h"
+      );
+      const weeklyWindow = result.snapshots.find(
+        (snapshot) => snapshot.windowType === "weekly"
+      );
+
+      assert.equal(result.subscriptionTier, "Plus");
+      assert.equal(result.snapshots.length, 2);
+      assert.equal(sessionWindow?.remainingPercent, 35);
+      assert.equal(sessionWindow?.resetAt, "2026-09-14T14:21:55.000Z");
+      assert.equal(weeklyWindow?.remainingPercent, 90);
+      assert.equal(weeklyWindow?.resetAt, "2026-09-21T09:21:55.000Z");
+      assert.equal(JSON.stringify(result).includes("private"), false);
     } finally {
       await rm(directory, { force: true, recursive: true });
     }

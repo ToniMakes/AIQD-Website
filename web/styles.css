@@ -57,9 +57,26 @@ button {
 }
 
 .shell {
-  width: min(1180px, calc(100vw - 32px));
+  width: min(1180px, calc(100vw - 64px));
   margin: 0 auto;
-  padding: 28px 0 40px;
+  padding: 32px 0 40px;
+}
+
+.app-footer-note {
+  margin-top: 28px;
+  color: var(--muted);
+  font-size: 0.82rem;
+  text-align: center;
+}
+
+.app-footer-note a {
+  color: var(--muted);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.app-footer-note a:hover {
+  color: var(--text);
 }
 
 .topbar {
@@ -110,11 +127,30 @@ h2 {
 }
 
 .topbar-actions {
+  display: grid;
+  align-items: center;
+  gap: 12px;
+  justify-items: end;
+}
+
+.topbar-primary-actions,
+.topbar-refresh-info {
   display: flex;
   align-items: center;
   gap: 12px;
-  flex-wrap: wrap;
+  width: max-content;
+}
+
+.topbar-refresh-info {
+  justify-content: flex-end;
+}
+
+.topbar-primary-actions {
+  display: grid;
+  grid-template-columns: max-content max-content;
   justify-content: end;
+  min-width: max-content;
+  white-space: nowrap;
 }
 
 .topbar-startup-control {
@@ -126,6 +162,8 @@ h2 {
   grid-template-columns: auto 34px;
   gap: 10px;
   align-items: center;
+  width: 100%;
+  box-sizing: border-box;
   min-height: 38px;
   padding: 0 12px;
   border: 1px solid var(--border);
@@ -306,6 +344,7 @@ h2 {
 
 .agent-card {
   display: grid;
+  align-content: start;
   gap: 18px;
   min-height: 256px;
   padding: 18px;
@@ -325,9 +364,24 @@ h2 {
 }
 
 .agent-provider {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  align-items: center;
   margin-bottom: 0;
   color: var(--muted);
   font-size: 0.88rem;
+}
+
+.agent-plan {
+  color: var(--accent-strong);
+  font-weight: 720;
+}
+
+.agent-plan::before {
+  margin-right: 8px;
+  color: var(--muted);
+  content: "·";
 }
 
 .badge {
@@ -398,6 +452,7 @@ h2 {
   display: inline-grid;
   gap: 3px;
   margin-bottom: 8px;
+  min-height: 61px;
 }
 
 .remaining {
@@ -451,6 +506,11 @@ h2 {
 .settings-list {
   display: grid;
   gap: 10px;
+}
+
+.settings-content > .button,
+.settings-content > a.button {
+  justify-self: start;
 }
 
 .reset-list,
@@ -507,6 +567,8 @@ h2 {
 .quota-window-row {
   display: grid;
   gap: 8px;
+  min-height: 108px;
+  box-sizing: border-box;
   padding-top: 12px;
   border-top: 1px solid var(--border);
 }
@@ -514,6 +576,169 @@ h2 {
 .quota-window-row:first-child {
   border-top: 0;
   padding-top: 0;
+}
+
+.reset-credit-panel {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg);
+}
+
+.reset-credit-panel.warning {
+  border-color: color-mix(in srgb, var(--warning) 46%, var(--border));
+  background: color-mix(in srgb, var(--warning) 8%, var(--bg));
+}
+
+.reset-credit-header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+}
+
+.reset-credit-header > div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.reset-credit-header strong,
+.reset-credit-header span,
+.reset-credit-row span,
+.reset-credit-row time,
+.reset-credit-warning,
+.reset-credit-empty {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.reset-credit-header strong {
+  font-size: 0.92rem;
+}
+
+.reset-credit-header > div > span,
+.reset-credit-empty {
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+.reset-credit-warning {
+  color: var(--warning);
+  font-size: 0.82rem;
+  font-weight: 720;
+}
+
+.reset-credit-list {
+  display: grid;
+  gap: 8px;
+}
+
+.reset-credit-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.3fr);
+  gap: 12px;
+  align-items: center;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+.reset-credit-row:first-child {
+  padding-top: 0;
+  border-top: 0;
+}
+
+.reset-credit-row span {
+  color: var(--text);
+  font-weight: 720;
+  white-space: nowrap;
+}
+
+.reset-credit-row time {
+  text-align: right;
+  white-space: nowrap;
+}
+
+.reset-credit-day-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.reset-credit-day-option {
+  display: inline-flex;
+  align-items: center;
+  min-height: 34px;
+  padding: 0 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text);
+  cursor: pointer;
+  font-weight: 720;
+}
+
+.reset-credit-day-option input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.reset-credit-day-option.is-selected {
+  border-color: color-mix(in srgb, var(--accent) 54%, var(--border));
+  background: color-mix(in srgb, var(--accent) 13%, var(--surface));
+  color: var(--accent-strong);
+}
+
+.reset-credit-day-option.is-disabled {
+  cursor: not-allowed;
+  opacity: 0.54;
+}
+
+.reset-credit-custom-option {
+  display: inline-flex;
+  align-items: center;
+  min-height: 34px;
+  gap: 6px;
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text);
+  font-weight: 720;
+}
+
+.reset-credit-custom-option.is-selected {
+  border-color: color-mix(in srgb, var(--accent) 54%, var(--border));
+  background: color-mix(in srgb, var(--accent) 13%, var(--surface));
+  color: var(--accent-strong);
+}
+
+.reset-credit-custom-option.is-disabled {
+  opacity: 0.54;
+}
+
+.reset-credit-custom-option input {
+  width: 48px;
+  min-height: 26px;
+  padding: 2px 5px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: var(--panel);
+  color: var(--text);
+  font: inherit;
+  text-align: center;
+}
+
+.reset-credit-test-notification {
+  min-height: 34px;
+  padding: 0 12px;
+  font-size: 0.82rem;
 }
 
 .toggle-row {
@@ -587,12 +812,25 @@ h2 {
 }
 
 .desktop-preferences-panel .panel-header {
-  margin-bottom: 6px;
+  margin-bottom: 12px;
 }
 
-.desktop-preference-content + .desktop-preference-content {
-  margin-top: 2px;
-  padding-top: 8px;
+/* The two preference rows live inside their own recessed, bordered
+   group - visually distinct from the "Desktop Preferences" title above
+   it - so the title reads as a heading over the group, not a third row
+   alongside "Which apps to show" / "Launch at startup". */
+.preference-group {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+
+.preference-group > details,
+.preference-group > .desktop-preference-content {
+  padding: 14px 16px;
+}
+
+.preference-group > * + * {
   border-top: 1px solid var(--border);
 }
 
@@ -625,7 +863,7 @@ h2 {
 
 .preference-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 480px) auto;
   gap: 16px;
   align-items: center;
   min-height: 58px;
@@ -1701,33 +1939,6 @@ h2 {
   margin-top: 12px;
 }
 
-.optional-settings-details {
-  margin-top: 12px;
-  padding: 10px 0;
-  border-top: 1px solid var(--border);
-}
-
-.optional-settings-details summary {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  cursor: pointer;
-  color: var(--text);
-  font-weight: 800;
-}
-
-.optional-settings-details summary small {
-  color: var(--muted);
-  font-size: 0.78rem;
-  font-weight: 700;
-  text-align: right;
-}
-
-.optional-settings-body {
-  margin-top: 12px;
-}
-
 .setup-flow {
   display: grid;
   gap: 10px;
@@ -1811,7 +2022,7 @@ h2 {
 .setup-next-actions {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-start;
   gap: 12px;
   padding: 12px 0;
   border-top: 1px solid var(--border);
@@ -1969,12 +2180,6 @@ h2 {
   color: var(--text);
   font-size: 0.86rem;
   white-space: pre;
-}
-
-.inline-command-list {
-  display: grid;
-  gap: 8px;
-  margin-top: 8px;
 }
 
 .inline-command {
@@ -2224,12 +2429,17 @@ h2 {
   }
 
   .topbar-actions {
-    justify-content: start;
+    justify-items: end;
     width: 100%;
   }
 
+  .topbar-primary-actions,
+  .topbar-refresh-info {
+    justify-content: flex-end;
+  }
+
   .topbar-startup-control {
-    width: min(100%, 210px);
+    width: auto;
   }
 
   .refresh-status {
@@ -2250,6 +2460,8 @@ h2 {
   .doctor-row,
   .event-row,
   .refresh-run-row,
+  .reset-credit-header,
+  .reset-credit-row,
   .onboarding-guide,
   .current-step-panel,
   .guided-step,
@@ -2278,6 +2490,7 @@ h2 {
 
   .quota-window-remaining,
   .primary-quota-meta time,
+  .reset-credit-row time,
   .quota-window-meta time {
     text-align: left;
   }

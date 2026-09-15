@@ -1,6 +1,6 @@
 # Data Sources
 
-The project should only parse data that is explicit, local or official, and narrow enough to avoid prompts, responses, source code, and chat content.
+The project only parses data that is explicit, local, or official — structured CLI/API/UI-documented fields. See [Privacy](privacy.md) for what it never reads.
 
 Every source below depends on a local file or CLI output written by a desktop app or CLI (Codex CLI, Claude Code CLI, Claude Desktop). None of them can see usage for an account that only uses a browser-based product (claude.ai or chatgpt.com in a plain web browser, with no desktop app or CLI installed) — there is no local file for AIQD to read in that case.
 
@@ -52,19 +52,21 @@ Mapping:
 
 - `u.fh` -> `session_5h`, `u.sd` -> `weekly`
 - `t` (epoch ms) -> `observedAt`
+- `resetAt` -> inferred from `t` plus the local window length (5 hours or 7 days), because Claude Desktop does not store a separate reset timestamp
 - source -> `local_quota_snapshot`, confidence -> `high`
-- `expiresAt` -> `observedAt` plus a fixed max-age window (a local freshness deadline only; no reset time is available in the file)
+- `expiresAt` -> `observedAt` plus a fixed max-age window (a local freshness deadline only — see the boundary notes below)
 
 Implementation boundary:
 
 - Parse only usage percentages and observation timestamps.
 - Convert used percentages into remaining percentages for AIQD cards.
 - Label the source as local Claude Desktop plan usage history, not as an official API.
-- Treat reset timing as unknown; this source never reports a reset time, and `expiresAt` must not be shown as quota reset timing.
+- Treat reset timing as inferred from the local usage-history sample time and window length; `expiresAt` remains only a local freshness deadline and must not be shown as quota reset timing.
 - Do not scrape the desktop UI.
 - Do not import cookies, session tokens, or browser storage.
 - Do not call hidden Claude endpoints.
-- Do not read prompts, responses, attachments, transcript paths, or source code.
+
+(See [Privacy](privacy.md) for the project-wide data boundary.)
 
 ## Claude Code
 
@@ -96,6 +98,11 @@ Mapping:
 - `expiresAt` -> the earlier of `resets_at` and five hours after `observedAt`
 - source -> `official_statusline`
 - confidence -> `official`
+
+Subscription tier:
+
+- AIQD can read `claudeAiOauth.subscriptionType` from the local Claude `.credentials.json` file and expose only the normalized tier label, such as `Pro`, for either the Claude Code or Claude Desktop dashboard source.
+- Access tokens, refresh tokens, account identifiers, and raw credential JSON are not stored, exported, or shown.
 
 Setup helper:
 
@@ -141,7 +148,10 @@ src/adapters/codex/__fixtures__/usage-limits-nested.json
 Current boundary:
 
 - Parse explicit `quota_snapshot`, `quotaSnapshot`, `usage_limits`, local Codex CLI `rate_limits`, and Codex app-server `rateLimits` / `rateLimitsByLimitId` structured records.
-- AIQD scans recent local Codex `rollout-*.jsonl` session logs by tailing bounded bytes and extracting only supported `rate_limits` fields.
+- Map Codex app-server `primary.windowDurationMins = 300` to `session_5h` and `secondary.windowDurationMins = 10080` to `weekly`, matching the visible Codex Settings usage menu.
+- Codex plans can expose different visible usage windows; AIQD displays only the supported windows actually present in local structured data and does not invent a missing 5-hour or weekly window.
+- Parse Codex app-server `rateLimitResetCredits` / `rate_limit_reset_credits` structured records, including trusted `codex_app.get_usage_limits` MCP tool results from local Codex session logs, for read-only reset credit display. AIQD stores only currently available Codex reset credits with title, reset type, granted time, expiry time, observed time, source, and confidence; it does not store the raw credit id, account id, raw response, or description text.
+- AIQD scans recent local Codex `rollout-*.jsonl` session logs by streaming only relevant structured JSON lines and extracting supported quota/reset-credit fields.
 - The Codex adapter exposes only its supported visible windows, currently `session_5h` and `weekly`; unsupported monthly or billing-cycle buckets are hidden from agent summaries, exports, and reset timelines until a reliable user-visible Codex source confirms them.
 - Users can write a structured manual fallback from a visible `/status` or Codex Settings > Usage value with `node dist/index.js codex snapshot --remaining-percent <0-100> --reset-at <iso-time>` or the Settings view form.
 - The manual fallback snapshot is stored at `~/.ai-agent-quota-dashboard/codex/codex-quota-snapshot.json`.

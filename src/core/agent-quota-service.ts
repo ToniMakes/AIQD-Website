@@ -10,6 +10,7 @@ import {
 import type {
   AgentManifest,
   AgentSummary,
+  CodexResetCredit,
   DoctorCheck,
   QuotaSnapshot,
   QuotaWindowType,
@@ -23,6 +24,8 @@ export type AgentQuotaServiceOptions = {
 };
 
 export class AgentQuotaService {
+  private readonly subscriptionTiers = new Map<string, string>();
+
   constructor(
     private readonly registry: AdapterRegistry,
     private readonly store: SqliteStore,
@@ -36,14 +39,23 @@ export class AgentQuotaService {
   async refresh(): Promise<RefreshResult> {
     const now = new Date();
     const snapshots: QuotaSnapshot[] = [];
+    const resetCredits: CodexResetCredit[] = [];
     const doctorChecks: DoctorCheck[] = [];
     const usageEvents = [];
     const errors: string[] = [];
+    this.subscriptionTiers.clear();
 
     for (const adapter of this.registry.adapters) {
       try {
         const result = await adapter.scan({ now });
         snapshots.push(...result.snapshots);
+        resetCredits.push(...(result.resetCredits ?? []));
+        if (result.subscriptionTier) {
+          this.subscriptionTiers.set(
+            agentMetadataKey(adapter.manifest),
+            result.subscriptionTier
+          );
+        }
         usageEvents.push(...result.usageEvents);
         doctorChecks.push(...result.doctorChecks);
       } catch (error) {
@@ -66,6 +78,7 @@ export class AgentQuotaService {
     }
 
     const quotaSaveResult = this.store.saveQuotaSnapshots(snapshots);
+    this.store.replaceCodexResetCredits(resetCredits);
     const result: RefreshResult = {
       observedAt: now.toISOString(),
       snapshotsSaved: quotaSaveResult.snapshotsSaved,
@@ -84,6 +97,7 @@ export class AgentQuotaService {
     const now = new Date();
     const manifests = this.registry.adapters.map((adapter) => adapter.manifest);
     const snapshots = this.listVisibleQuotaSnapshots();
+    const codexResetCredits = this.store.listCodexResetCredits(now);
     const checks = this.store.listDoctorChecks();
 
     return manifests.map((manifest) => {
@@ -106,6 +120,18 @@ export class AgentQuotaService {
       if (primarySnapshot) {
         summary.primarySnapshot = primarySnapshot;
         summary.lastObservedAt = primarySnapshot.observedAt;
+      }
+
+      const subscriptionTier = this.subscriptionTiers.get(
+        agentMetadataKey(manifest)
+      );
+
+      if (subscriptionTier) {
+        summary.subscriptionTier = subscriptionTier;
+      }
+
+      if (manifest.provider === "openai" && manifest.agent === "codex") {
+        summary.resetCredits = codexResetCredits;
       }
 
       const emptyState = describeEmptyQuotaState(
@@ -168,4 +194,8 @@ function isSameAgent(
   item: { provider: string; agent: string }
 ): boolean {
   return manifest.provider === item.provider && manifest.agent === item.agent;
+}
+
+function agentMetadataKey(item: { provider: string; agent: string }): string {
+  return `${item.provider}:${item.agent}`;
 }

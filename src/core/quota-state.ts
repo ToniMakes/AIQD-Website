@@ -5,8 +5,22 @@ import type {
   DoctorStatus,
   QuotaSnapshot,
   QuotaSnapshotView,
-  QuotaStatus
+  QuotaStatus,
+  QuotaWindowType
 } from "./types.js";
+
+const quotaWindowLabels: Record<QuotaWindowType, string> = {
+  billing_cycle: "Billing cycle",
+  credits: "Credits",
+  daily: "Daily",
+  monthly: "Monthly",
+  session_5h: "5h window",
+  weekly: "Weekly"
+};
+
+export function windowLabel(windowType: string): string {
+  return quotaWindowLabels[windowType as QuotaWindowType] ?? windowType;
+}
 
 const statusSeverity: Record<QuotaStatus, number> = {
   critical: 5,
@@ -22,6 +36,8 @@ const doctorSeverity: Record<DoctorStatus, number> = {
   info: 2,
   pass: 1
 };
+
+const sessionSnapshotMaxAgeMs = 15 * 60 * 1000;
 
 export function isSnapshotExpired(
   snapshot: QuotaSnapshot,
@@ -54,6 +70,14 @@ export function describeSnapshotFreshness(
     };
   }
 
+  if (isSnapshotTooOld(snapshot, now)) {
+    return {
+      status: "stale",
+      reason: "too_old",
+      label: "needs refresh"
+    };
+  }
+
   return {
     status: "fresh",
     reason: "fresh",
@@ -79,7 +103,11 @@ export function resolveQuotaStatus(
     return "unknown";
   }
 
-  if (snapshot.stale || isSnapshotExpired(snapshot, now)) {
+  if (
+    snapshot.stale ||
+    isSnapshotExpired(snapshot, now) ||
+    isSnapshotTooOld(snapshot, now)
+  ) {
     return "stale";
   }
 
@@ -96,6 +124,24 @@ export function resolveQuotaStatus(
   }
 
   return "healthy";
+}
+
+function isSnapshotTooOld(snapshot: QuotaSnapshot, now: Date): boolean {
+  if (
+    snapshot.provider !== "openai" ||
+    snapshot.agent !== "codex" ||
+    snapshot.windowType !== "session_5h" ||
+    snapshot.source === "demo"
+  ) {
+    return false;
+  }
+
+  const observedAtMs = Date.parse(snapshot.observedAt);
+
+  return (
+    Number.isFinite(observedAtMs) &&
+    now.getTime() - observedAtMs > sessionSnapshotMaxAgeMs
+  );
 }
 
 export function choosePrimarySnapshot<TSnapshot extends QuotaSnapshot>(

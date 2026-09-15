@@ -1,13 +1,22 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
-import type { AgentAdapter, AdapterScanContext } from "../contracts.js";
-import { inspectPath, uniquePaths } from "../path-utils.js";
+import type {
+  AgentAdapter,
+  AdapterScanContext,
+  CommonAdapterOptions
+} from "../contracts.js";
+import { inspectPath, resolveDataPaths, uniquePaths } from "../path-utils.js";
+import { readClaudeSubscriptionTier } from "../claude-subscription.js";
 import type { DoctorCheck, QuotaSnapshot } from "../../core/types.js";
 import { parsePlanUsageHistory } from "./parse-plan-usage-history.js";
 
-export type ClaudeDesktopAdapterOptions = {
-  configuredDataPaths?: string[];
-  demoMode: boolean;
+export type ClaudeDesktopAdapterOptions = CommonAdapterOptions;
+
+export const claudeDesktopDisplayName = "Claude Desktop";
+
+type ClaudeDesktopScanData = {
+  snapshots: QuotaSnapshot[];
+  subscriptionTier?: string;
 };
 
 export function createClaudeDesktopAdapter(
@@ -21,7 +30,7 @@ export function createClaudeDesktopAdapter(
     manifest: {
       provider: "anthropic",
       agent: "claude-desktop",
-      displayName: "Claude Desktop",
+      displayName: claudeDesktopDisplayName,
       shortName: "Claude Desktop",
       description: "Claude Desktop local plan-usage-history.json.",
       defaultDataPaths,
@@ -31,12 +40,15 @@ export function createClaudeDesktopAdapter(
       const checks: DoctorCheck[] = [];
       const inspections = await Promise.all(defaultDataPaths.map(inspectPath));
       const readableRoots = inspections.filter((inspection) => inspection.readable);
-      const snapshots = options.demoMode
-        ? createDemoClaudeDesktopSnapshots(context.now)
-        : await readClaudeDesktopQuotaSnapshots(
+      const scanData = options.demoMode
+        ? {
+            snapshots: createDemoClaudeDesktopSnapshots(context.now)
+          }
+        : await readClaudeDesktopData(
             readableRoots.map((inspection) => inspection.path),
             context
           );
+      const { snapshots } = scanData;
 
       for (const inspection of inspections) {
         checks.push({
@@ -69,6 +81,9 @@ export function createClaudeDesktopAdapter(
 
       return {
         snapshots,
+        ...(scanData.subscriptionTier
+          ? { subscriptionTier: scanData.subscriptionTier }
+          : {}),
         usageEvents: [],
         doctorChecks: checks
       };
@@ -87,10 +102,7 @@ export function getDefaultClaudeDesktopDataPaths(): string[] {
 export function resolveClaudeDesktopDataPaths(
   configuredDataPaths: string[] = []
 ): string[] {
-  return uniquePaths([
-    ...getDefaultClaudeDesktopDataPaths(),
-    ...configuredDataPaths
-  ]);
+  return resolveDataPaths(getDefaultClaudeDesktopDataPaths(), configuredDataPaths);
 }
 
 async function readClaudeDesktopQuotaSnapshots(
@@ -112,6 +124,19 @@ async function readClaudeDesktopQuotaSnapshots(
   );
 
   return results.flat();
+}
+
+async function readClaudeDesktopData(
+  paths: string[],
+  context: AdapterScanContext
+): Promise<ClaudeDesktopScanData> {
+  const snapshots = await readClaudeDesktopQuotaSnapshots(paths, context);
+  const subscriptionTier = await readClaudeSubscriptionTier(paths);
+
+  return {
+    snapshots,
+    ...(subscriptionTier ? { subscriptionTier } : {})
+  };
 }
 
 function createDemoClaudeDesktopSnapshots(now: Date): QuotaSnapshot[] {

@@ -3,6 +3,7 @@ const {
   BrowserWindow,
   dialog,
   Menu,
+  Notification,
   Tray,
   globalShortcut,
   ipcMain,
@@ -53,8 +54,8 @@ const trayIconPngPath = path.join(projectRoot, "assets", "tray-icon.png");
 const trayIconSvgPath = path.join(projectRoot, "assets", "tray-icon.svg");
 const cliPath = path.join(projectRoot, "dist", "index.js");
 const preloadPath = path.join(__dirname, "preload.cjs");
-const panelSize = { width: 340, height: 236 };
-const widgetSize = { width: 340, height: 196 };
+const panelSize = { width: 340, height: 272 };
+const widgetSize = { width: 340, height: 224 };
 const smokeMode = process.argv.includes("--smoke");
 const firstRunGuideSmokeMode = process.argv.includes("--smoke-first-run-guide");
 const smokeLikeMode = smokeMode || firstRunGuideSmokeMode;
@@ -382,6 +383,14 @@ function registerIpc() {
 
   ipcMain.handle("toggle-widget", () => {
     toggleWidgetWindow();
+  });
+
+  ipcMain.handle("show-notification", (_event, title, body) => {
+    if (!Notification.isSupported()) {
+      return { ok: false, reason: "unsupported" };
+    }
+    new Notification({ title, body }).show();
+    return { ok: true };
   });
 
   ipcMain.handle("hide-current-window", (event) => {

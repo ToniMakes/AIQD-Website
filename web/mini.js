@@ -1,14 +1,30 @@
 import {
-  clamp,
+  codexResetCreditReminderState,
+  codexResetCreditReminderStorageKey,
+  buildDisplayAgents as sharedBuildDisplayAgents,
   createI18n,
+  defaultCodexResetCreditReminderPreferences,
   escapeHtml,
+  filterAgentsByOnboarding as sharedFilterAgentsByOnboarding,
+  formatUsed as sharedFormatUsed,
+  hasSnapshotMeterValue as hasMeterValue,
   isSameSnapshot,
   isStaleSnapshot,
   languageStorageKey,
+  loadFirstRunOnboardingPreferences,
   mergeClaudeSnapshots,
   mergeSnapshotResetTiming,
+  normalizeCodexResetCreditReminderPreferences,
+  preferredClaudeDashboardSource as sharedPreferredClaudeDashboardSource,
   primaryMeterClass,
-  resolveInitialLanguage
+  readinessDisplayName as sharedReadinessDisplayName,
+  resolveInitialLanguage,
+  shouldShowAgentFamily as sharedShouldShowAgentFamily,
+  shouldShowClaudeCliWorkflow as sharedShouldShowClaudeCliWorkflow,
+  shouldShowClaudeDesktopWorkflow as sharedShouldShowClaudeDesktopWorkflow,
+  snapshotMeterClass as windowMeterClass,
+  snapshotMeterValue as meterValue,
+  staleReasonLabel as sharedStaleReasonLabel
 } from "./shared.js";
 
 let currentLanguage = resolveInitialLanguage();
@@ -18,6 +34,8 @@ const { tx, locale, compactNumber, formatRelative } = createI18n(
 
 const state = {
   agents: [],
+  codexResetCreditReminderPreferences:
+    defaultCodexResetCreditReminderPreferences(),
   generatedAt: undefined,
   isRefreshing: false,
   lastError: undefined,
@@ -198,6 +216,8 @@ async function load(options = {}) {
     ]);
 
     state.agents = agentsPayload.agents ?? [];
+    state.codexResetCreditReminderPreferences =
+      loadCodexResetCreditReminderPreferences();
     state.generatedAt = agentsPayload.generatedAt;
     state.lastError = undefined;
     state.onboardingPreferences = onboardingPreferences;
@@ -236,219 +256,35 @@ function render() {
   renderFooter();
 }
 
-async function loadFirstRunOnboardingPreferences() {
-  try {
-    const preferences = window.aiqdDesktop?.getFirstRunOnboarding
-      ? await window.aiqdDesktop.getFirstRunOnboarding()
-      : JSON.parse(window.localStorage?.getItem("aiqd:first-run-onboarding:v1") ?? "null");
-
-    return normalizeOnboardingPreferences(preferences);
-  } catch {
-    return defaultOnboardingPreferences();
-  }
-}
-
-function defaultOnboardingPreferences() {
-  return {
-    agents: {
-      claude: true,
-      codex: true
-    },
-    claudeSources: {
-      cli: false,
-      desktop: true
-    },
-    claudeSource: "desktop",
-    completed: false
-  };
-}
-
-function normalizeOnboardingPreferences(preferences) {
-  const fallback = defaultOnboardingPreferences();
-  const value = preferences && typeof preferences === "object" ? preferences : {};
-  const agents = value.agents && typeof value.agents === "object" ? value.agents : {};
-  const claudeSources = normalizeClaudeSources(value, fallback.claudeSources);
-
-  return {
-    agents: {
-      claude: agents.claude !== false,
-      codex: agents.codex !== false
-    },
-    claudeSources,
-    claudeSource: claudeSources.desktop ? "desktop" : "cli",
-    completed: value.completed === true
-  };
-}
-
-function normalizeClaudeSources(value, fallback) {
-  const sources =
-    value?.claudeSources && typeof value.claudeSources === "object"
-      ? value.claudeSources
-      : undefined;
-  const legacySource =
-    value?.claudeSource === "cli" || value?.claudeSource === "desktop"
-      ? value.claudeSource
-      : undefined;
-
-  let desktop =
-    sources?.desktop === true ||
-    (sources?.desktop !== false && !sources && legacySource !== "cli") ||
-    (!sources && !legacySource && fallback.desktop === true);
-  let cli =
-    sources?.cli === true ||
-    (!sources && legacySource === "cli") ||
-    (!sources && !legacySource && fallback.cli === true);
-
-  if (!desktop && !cli) {
-    desktop = true;
-  }
-
-  return {
-    cli,
-    desktop
-  };
-}
-
 function filterAgentsByOnboarding(agents) {
-  return agents.filter((agent) => {
-    if (agent.agent === "codex") {
-      return shouldShowAgentFamily("codex");
-    }
-
-    if (agent.agent === "claude-code") {
-      return shouldShowClaudeCliWorkflow();
-    }
-
-    if (agent.agent === "claude-desktop") {
-      return shouldShowClaudeDesktopWorkflow();
-    }
-
-    if (agent.provider === "anthropic" || String(agent.agent).startsWith("claude")) {
-      return shouldShowAgentFamily("claude");
-    }
-
-    return true;
-  });
+  return sharedFilterAgentsByOnboarding(agents, state.onboardingPreferences);
 }
 
 function shouldShowAgentFamily(family) {
-  const preferences = state.onboardingPreferences;
-
-  if (!preferences?.completed) {
-    return true;
-  }
-
-  if (family === "codex") {
-    return preferences.agents.codex !== false;
-  }
-
-  if (family === "claude") {
-    return preferences.agents.claude !== false;
-  }
-
-  return true;
-}
-
-function selectedClaudeSources() {
-  return normalizeOnboardingPreferences(state.onboardingPreferences).claudeSources;
+  return sharedShouldShowAgentFamily(family, state.onboardingPreferences);
 }
 
 function shouldShowClaudeDesktopWorkflow() {
-  if (!shouldShowAgentFamily("claude")) {
-    return false;
-  }
-
-  if (!state.onboardingPreferences?.completed) {
-    return true;
-  }
-
-  return selectedClaudeSources().desktop;
+  return sharedShouldShowClaudeDesktopWorkflow(state.onboardingPreferences);
 }
 
 function shouldShowClaudeCliWorkflow() {
-  if (!shouldShowAgentFamily("claude")) {
-    return false;
-  }
-
-  if (!state.onboardingPreferences?.completed) {
-    return true;
-  }
-
-  const sources = selectedClaudeSources();
-  return sources.cli && !sources.desktop;
+  return sharedShouldShowClaudeCliWorkflow(state.onboardingPreferences);
 }
 
 // Mirrors app.js: Claude Code CLI and Claude Desktop report the same
 // underlying account, so the mini panel shows one auto-picked Claude card
-// instead of two, same as the main dashboard.
+// instead of two, same as the main dashboard. Honors the same onboarding
+// source preference as the dashboard, via the shared implementation.
 function buildDisplayAgents(agents) {
-  const claudeCode = agents.find((agent) => agent.agent === "claude-code");
-  const claudeDesktop = agents.find((agent) => agent.agent === "claude-desktop");
-
-  if (!claudeCode && !claudeDesktop) {
-    return agents;
-  }
-
-  const winner = pickPrimaryClaudeAgent(claudeCode, claudeDesktop);
-  const sources = [claudeCode, claudeDesktop].filter(Boolean);
-  const snapshots = mergeClaudeSnapshots(winner.snapshots ?? [], sources);
-  const primarySnapshot = mergeSnapshotResetTiming(
-    winner.primarySnapshot,
-    sources.flatMap((source) => source.snapshots ?? [])
+  return sharedBuildDisplayAgents(
+    agents,
+    sharedPreferredClaudeDashboardSource(state.onboardingPreferences)
   );
-  const merged = {
-    ...winner,
-    agent: "claude",
-    displayName: "Claude",
-    primarySnapshot,
-    snapshots,
-    shortName: "Claude"
-  };
-
-  return agents
-    .filter((agent) => agent.agent !== "claude-code" && agent.agent !== "claude-desktop")
-    .concat([merged]);
-}
-
-function pickPrimaryClaudeAgent(claudeCode, claudeDesktop) {
-  if (!claudeDesktop) {
-    return claudeCode;
-  }
-
-  if (!claudeCode) {
-    return claudeDesktop;
-  }
-
-  const codeFresh = Boolean(
-    claudeCode.primarySnapshot && !isStaleSnapshot(claudeCode.primarySnapshot)
-  );
-  const desktopFresh = Boolean(
-    claudeDesktop.primarySnapshot && !isStaleSnapshot(claudeDesktop.primarySnapshot)
-  );
-
-  if (codeFresh !== desktopFresh) {
-    return codeFresh ? claudeCode : claudeDesktop;
-  }
-
-  if (codeFresh && desktopFresh) {
-    const codeAt = Date.parse(claudeCode.primarySnapshot?.observedAt ?? "") || 0;
-    const desktopAt = Date.parse(claudeDesktop.primarySnapshot?.observedAt ?? "") || 0;
-    return desktopAt > codeAt ? claudeDesktop : claudeCode;
-  }
-
-  if (claudeCode.primarySnapshot && !claudeDesktop.primarySnapshot) {
-    return claudeCode;
-  }
-
-  if (claudeDesktop.primarySnapshot && !claudeCode.primarySnapshot) {
-    return claudeDesktop;
-  }
-
-  return claudeCode;
 }
 
 function renderAgent(agent) {
-  const primary = agent.primarySnapshot;
+  const primary = miniPrimarySnapshot(agent);
   const status = agent.status ?? "unknown";
   const stalePrimary = isStaleSnapshot(primary);
   const guidance = primary ? undefined : emptyStateGuidance(agent);
@@ -469,7 +305,8 @@ function renderAgent(agent) {
           style="--value: ${meterValue(primary)}%"
         ></div>
       </div>
-      <div class="mini-window-list">${renderWindowRows(agent)}</div>
+      <div class="mini-window-list">${renderWindowRows(agent, primary)}</div>
+      ${renderMiniResetCreditSummary(agent)}
       <div class="mini-detail">${escapeHtml(detail)}</div>
     </article>
   `;
@@ -500,7 +337,7 @@ function renderError() {
     <article class="mini-agent unknown">
       <div class="mini-agent-top">
         <span class="status-dot unknown" aria-hidden="true"></span>
-        <strong>Offline</strong>
+        <strong>${escapeHtml(tx("Offline", "离线"))}</strong>
         <span class="mini-remaining">--</span>
       </div>
       <div class="mini-primary-label">${escapeHtml(tx("offline", "离线"))}</div>
@@ -573,10 +410,10 @@ function footerState() {
   if ((latestRun?.errors?.length ?? 0) > 0) {
     return {
       action: "doctor",
-      ariaLabel: tx("Open Doctor for refresh warning", "打开诊断查看刷新警告"),
+      ariaLabel: tx("Open Diagnostics for refresh warning", "打开诊断查看刷新警告"),
       kind: "warning",
       target: "refresh-run-list",
-      text: tx("Refresh warning - open Doctor", "刷新有警告 - 打开诊断"),
+      text: tx("Refresh warning - open Diagnostics", "刷新有警告 - 打开诊断"),
       title: refreshRunTitle(latestRun)
     };
   }
@@ -657,8 +494,8 @@ function footerState() {
       kind: "info",
       target: "settings-content",
       text: state.setupStatus?.statusLineManagedByApp
-        ? tx("Watching Claude Code for rate_limits", "正在监听 Claude Code rate_limits")
-        : tx("Claude Code setup needed", "需要设置 Claude Code"),
+        ? tx("Claude listening", "正在监听 Claude")
+        : tx("Claude setup needed", "需要设置 Claude"),
       title: latestRun ? refreshRunTitle(latestRun) : undefined
     };
   }
@@ -684,7 +521,7 @@ function footerState() {
 
 function readinessActionLabel(action, reason) {
   return action === "doctor"
-    ? tx("Open Doctor to {reason}", "打开诊断以{reason}", { reason })
+    ? tx("Open Diagnostics to {reason}", "打开诊断以{reason}", { reason })
     : tx("Open Settings to {reason}", "打开设置以{reason}", { reason });
 }
 
@@ -692,6 +529,18 @@ function latestRefreshRun() {
   return state.refreshRuns
     .slice()
     .sort((left, right) => Date.parse(right.observedAt) - Date.parse(left.observedAt))[0];
+}
+
+function loadCodexResetCreditReminderPreferences() {
+  try {
+    return normalizeCodexResetCreditReminderPreferences(
+      JSON.parse(
+        window.localStorage?.getItem(codexResetCreditReminderStorageKey) ?? "null"
+      )
+    );
+  } catch {
+    return defaultCodexResetCreditReminderPreferences();
+  }
 }
 
 function snapshotCountText(count) {
@@ -725,8 +574,8 @@ function refreshRunTitle(run) {
   return lines.join("\n");
 }
 
-function renderWindowRows(agent) {
-  const snapshots = prioritizeSnapshots(agent.snapshots ?? [], agent.primarySnapshot);
+function renderWindowRows(agent, primary) {
+  const snapshots = prioritizeSnapshots(agent.snapshots ?? [], primary);
 
   if (snapshots.length === 0) {
     const guidance = emptyStateGuidance(agent);
@@ -769,6 +618,64 @@ function renderWindowRows(agent) {
   return rows + more;
 }
 
+function miniPrimarySnapshot(agent) {
+  const snapshots = agent.snapshots ?? [];
+  return (
+    snapshots.find((snapshot) => snapshot.windowType === "session_5h") ??
+    snapshots.find((snapshot) => snapshot.windowType === "weekly") ??
+    agent.primarySnapshot
+  );
+}
+
+function renderMiniResetCreditSummary(agent) {
+  if (agent.provider !== "openai" || agent.agent !== "codex") {
+    return "";
+  }
+
+  const reminder = codexResetCreditReminderState(
+    agent.resetCredits,
+    state.codexResetCreditReminderPreferences
+  );
+
+  if (reminder.count === 0) {
+    return "";
+  }
+
+  const statusClass = reminder.withinReminder ? "warning" : "healthy";
+  const countText = tx("Resets x{count}", "重置额度 {count} 次", {
+    count: reminder.count
+  });
+  const expiryText = reminder.withinReminder
+    ? tx("Next expires in {days}d", "最近 {days} 天后到期", {
+        count: reminder.count,
+        days: reminder.daysUntilNext
+      })
+    : tx("Next {time}", "最近 {time}", {
+        time: formatTimestamp(reminder.nextCredit?.expiresAt)
+      });
+
+  return `
+    <div
+      class="mini-reset-credit ${escapeHtml(statusClass)}"
+      title="${escapeHtml(miniResetCreditTitle(reminder))}"
+    >
+      <span class="mini-reset-credit-count">${escapeHtml(countText)}</span>
+      <span class="mini-reset-credit-expiry">${escapeHtml(expiryText)}</span>
+    </div>
+  `;
+}
+
+function miniResetCreditTitle(reminder) {
+  return tx(
+    "{count} Codex reset credits. Next expires {time}.",
+    "{count} 个 Codex 重置额度。最近到期：{time}。",
+    {
+      count: reminder.count,
+      time: formatTimestamp(reminder.nextCredit?.expiresAt, { long: true })
+    }
+  );
+}
+
 function renderWindowRow(snapshot) {
   const timing = snapshotTimingDetail(snapshot);
   const timingTitle = snapshotTimingTitle(snapshot);
@@ -805,23 +712,6 @@ function renderWindowMeter(snapshot) {
       ></div>
     </div>
   `;
-}
-
-function hasMeterValue(snapshot) {
-  return Boolean(
-    typeof snapshot?.remainingPercent === "number" ||
-      (typeof snapshot?.remaining === "number" &&
-        typeof snapshot?.total === "number" &&
-        snapshot.total > 0)
-  );
-}
-
-function windowMeterClass(snapshot) {
-  if (snapshot.windowType === "session_5h") {
-    return "session";
-  }
-
-  return snapshot.stale ? "stale" : "standard";
 }
 
 function prioritizeSnapshots(snapshots, primary) {
@@ -875,8 +765,8 @@ function strictReadinessProgress() {
     ready,
     target: target.target,
     title: tx(
-      "{ready}/{total} strict trial checks ready. Missing: {missing}.",
-      "{ready}/{total} 项严格试用检查就绪。缺少：{missing}。",
+      "{ready}/{total} ready. Missing: {missing}.",
+      "{ready}/{total} 已就绪。缺少：{missing}。",
       {
         missing: missingText,
         ready,
@@ -940,15 +830,7 @@ function readinessCheckTarget(check) {
 }
 
 function readinessDisplayName(check) {
-  if (!check?.displayName || currentLanguage !== "zh") {
-    return check?.displayName;
-  }
-
-  const labels = {
-    Mode: "模式"
-  };
-
-  return labels[check.displayName] ?? check.displayName;
+  return sharedReadinessDisplayName(check, currentLanguage);
 }
 
 function setupProgress(agents) {
@@ -1045,8 +927,8 @@ function emptyStateGuidance(agent) {
   if (agent.emptyState?.reason === "adapter_error") {
     return {
       action: "doctor",
-      actionLabel: tx("Doctor", "诊断"),
-      detail: tx("Check the failing adapter", "检查失败的适配器"),
+      actionLabel: tx("Diagnostics", "诊断"),
+      detail: tx("Something went wrong - see details", "出了点问题，查看详情"),
       label: tx("check", "检查"),
       target: "doctor-list",
       title: tx("Scan failed", "扫描失败")
@@ -1056,22 +938,22 @@ function emptyStateGuidance(agent) {
   if (agent.agent === "codex") {
     return {
       action: "settings",
-      actionLabel: tx("Save /status", "保存 /status"),
-      detail: tx("Paste visible quota + reset", "粘贴可见额度和重置时间"),
-      label: tx("setup 1", "设置 1"),
+      actionLabel: tx("Settings", "设置"),
+      detail: tx("Use Codex once, then refresh", "先用一次 Codex，然后刷新"),
+      label: tx("setup", "设置"),
       target: "codex-snapshot-content",
-      title: tx("Codex /status needed", "需要 Codex /status")
+      title: tx("Codex needs setup", "Codex 需要设置")
     };
   }
 
   if (agent.agent === "claude-code") {
     return {
       action: "settings",
-      actionLabel: tx("Install setup", "安装设置"),
-      detail: tx("Add local statusline sink, or use Claude Desktop instead", "添加本地 statusline sink，或改用 Claude Desktop"),
-      label: tx("setup 2", "设置 2"),
+      actionLabel: tx("Settings", "设置"),
+      detail: tx("Set up Claude Code, or use Claude Desktop instead", "设置 Claude Code，或改用 Claude Desktop"),
+      label: tx("setup", "设置"),
       target: "settings-content",
-      title: tx("Claude statusline needed", "需要 Claude 状态栏")
+      title: tx("Claude needs setup", "Claude 需要设置")
     };
   }
 
@@ -1088,7 +970,7 @@ function emptyStateGuidance(agent) {
 
   return {
     action: "doctor",
-    actionLabel: tx("Doctor", "诊断"),
+    actionLabel: tx("Diagnostics", "诊断"),
     detail: agent.emptyState?.detail ?? tx("No quota data yet", "还没有额度数据"),
     label: tx("unavailable", "不可用"),
     target: "doctor-list",
@@ -1128,30 +1010,6 @@ function formatRemaining(snapshot) {
   }
 
   return "--";
-}
-
-function meterValue(snapshot) {
-  if (!snapshot) {
-    return 0;
-  }
-
-  if (isStaleSnapshot(snapshot)) {
-    return 0;
-  }
-
-  if (typeof snapshot.remainingPercent === "number") {
-    return clamp(snapshot.remainingPercent, 0, 100);
-  }
-
-  if (
-    typeof snapshot.remaining === "number" &&
-    typeof snapshot.total === "number" &&
-    snapshot.total > 0
-  ) {
-    return clamp((snapshot.remaining / snapshot.total) * 100, 0, 100);
-  }
-
-  return 0;
 }
 
 function agentDetail(agent) {
@@ -1201,9 +1059,14 @@ function snapshotTimingDetail(snapshot, options = {}) {
     : "";
 
   if (snapshot?.resetAt) {
+    const time =
+      snapshot.windowType === "session_5h"
+        ? formatResetClock(snapshot.resetAt)
+        : formatResetDistance(snapshot.resetAt);
+
     return tx("{window}reset {time}", "{window}{time}重置", {
       window: prefix,
-      time: formatResetDistance(snapshot.resetAt)
+      time
     });
   }
 
@@ -1259,31 +1122,11 @@ function formatRemainingText(snapshot) {
 }
 
 function staleReasonLabel(snapshot) {
-  if (snapshot?.freshness?.reason === "expired") {
-    return tx("past reported reset", "超过报告的重置时间");
-  }
-
-  if (snapshot?.freshness?.reason === "source_marked_stale" || snapshot?.stale) {
-    return tx("marked stale by source", "数据源要求刷新");
-  }
-
-  return tx("needs fresh data", "需要新数据");
+  return sharedStaleReasonLabel(snapshot, tx);
 }
 
 function formatUsedText(snapshot) {
-  if (!snapshot) {
-    return "";
-  }
-
-  if (typeof snapshot.usedPercent === "number") {
-    return `${Math.round(snapshot.usedPercent)}%`;
-  }
-
-  if (typeof snapshot.used === "number") {
-    return `${compactNumber(snapshot.used)} ${snapshot.unit ?? ""}`.trim();
-  }
-
-  return "";
+  return sharedFormatUsed(snapshot, compactNumber);
 }
 
 function formatResetDistance(value) {
@@ -1317,6 +1160,23 @@ function formatResetDistance(value) {
     : tx("in {amount}", "{amount} 后", { amount });
 }
 
+function formatResetClock(value) {
+  if (!value) {
+    return "--";
+  }
+
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return "--";
+  }
+
+  return new Intl.DateTimeFormat(locale(), {
+    hour: "numeric",
+    minute: "2-digit"
+  }).format(date);
+}
+
 function formatTimestamp(value, options = {}) {
   if (!value) {
     return "--";
@@ -1342,8 +1202,8 @@ function windowLabel(windowType) {
     credits: tx("Credits", "点数"),
     daily: tx("Daily", "每日"),
     monthly: tx("Monthly", "每月"),
-    session_5h: "5h",
-    weekly: tx("Weekly", "每周")
+    session_5h: tx("5 hours", "5 小时"),
+    weekly: tx("1 week", "1 周")
   };
 
   return labels[windowType] ?? windowType;

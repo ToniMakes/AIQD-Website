@@ -1,8 +1,13 @@
 import { homedir } from "node:os";
 import { join } from "node:path";
-import type { AgentAdapter, AdapterScanContext } from "../contracts.js";
+import type {
+  AgentAdapter,
+  AdapterScanContext,
+  CommonAdapterOptions
+} from "../contracts.js";
 import { findReadableCandidateFiles } from "../local-candidates.js";
-import { inspectPath, uniquePaths } from "../path-utils.js";
+import { inspectPath, resolveDataPaths, uniquePaths } from "../path-utils.js";
+import { readClaudeSubscriptionTier } from "../claude-subscription.js";
 import { defaultClaudeStatuslineSnapshotDir } from "../../config/paths.js";
 import type { DoctorCheck, QuotaSnapshot } from "../../core/types.js";
 import {
@@ -11,9 +16,13 @@ import {
 } from "../../setup/claude-statusline-status.js";
 import { parseClaudeCodeStatusline } from "./parse-statusline.js";
 
-export type ClaudeCodeAdapterOptions = {
-  configuredDataPaths?: string[];
-  demoMode: boolean;
+export type ClaudeCodeAdapterOptions = CommonAdapterOptions;
+
+export const claudeCodeDisplayName = "Claude Code";
+
+type ClaudeCodeScanData = {
+  snapshots: QuotaSnapshot[];
+  subscriptionTier?: string;
 };
 
 export function createClaudeCodeAdapter(
@@ -27,7 +36,7 @@ export function createClaudeCodeAdapter(
     manifest: {
       provider: "anthropic",
       agent: "claude-code",
-      displayName: "Claude Code",
+      displayName: claudeCodeDisplayName,
       shortName: "Claude Code",
       description: "Claude Code local usage files and statusline rate limits.",
       defaultDataPaths,
@@ -37,12 +46,15 @@ export function createClaudeCodeAdapter(
       const checks: DoctorCheck[] = [];
       const inspections = await Promise.all(defaultDataPaths.map(inspectPath));
       const readableRoots = inspections.filter((inspection) => inspection.readable);
-      const snapshots = options.demoMode
-        ? createDemoClaudeSnapshots(context.now)
-        : await readClaudeCodeQuotaSnapshots(
+      const scanData = options.demoMode
+        ? {
+            snapshots: createDemoClaudeSnapshots(context.now)
+          }
+        : await readClaudeCodeData(
             readableRoots.map((inspection) => inspection.path),
             context
           );
+      const { snapshots } = scanData;
 
       for (const inspection of inspections) {
         checks.push({
@@ -84,6 +96,9 @@ export function createClaudeCodeAdapter(
 
       return {
         snapshots,
+        ...(scanData.subscriptionTier
+          ? { subscriptionTier: scanData.subscriptionTier }
+          : {}),
         usageEvents: [],
         doctorChecks: checks
       };
@@ -105,10 +120,7 @@ export function getDefaultClaudeCodeDataPaths(): string[] {
 export function resolveClaudeCodeDataPaths(
   configuredDataPaths: string[] = []
 ): string[] {
-  return uniquePaths([
-    ...getDefaultClaudeCodeDataPaths(),
-    ...configuredDataPaths
-  ]);
+  return resolveDataPaths(getDefaultClaudeCodeDataPaths(), configuredDataPaths);
 }
 
 async function readClaudeCodeQuotaSnapshots(
@@ -125,6 +137,19 @@ async function readClaudeCodeQuotaSnapshots(
       rawSourceRef: candidate.path
     })
   );
+}
+
+async function readClaudeCodeData(
+  roots: string[],
+  context: AdapterScanContext
+): Promise<ClaudeCodeScanData> {
+  const snapshots = await readClaudeCodeQuotaSnapshots(roots, context);
+  const subscriptionTier = await readClaudeSubscriptionTier(roots);
+
+  return {
+    snapshots,
+    ...(subscriptionTier ? { subscriptionTier } : {})
+  };
 }
 
 function createDemoClaudeSnapshots(now: Date): QuotaSnapshot[] {

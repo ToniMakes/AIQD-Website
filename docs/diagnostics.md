@@ -2,7 +2,7 @@
 
 Use the Doctor CLI when the dashboard has no quota data, shows stale data, or behaves differently from what an agent reports.
 
-For Claude Code, Doctor and Settings report the same statusline readiness checks: Claude settings, the managed shim, the latest sanitized snapshot, and whether supported `rate_limits` windows have been received recently.
+For Claude Code, the Diagnostics tab and Settings report the same statusline readiness checks: Claude settings, the managed shim, the latest sanitized snapshot, and whether supported `rate_limits` windows have been received recently.
 
 Before opening Claude Code, you can run `node dist/index.js claude-statusline-sink --self-test` to verify the local sink with temporary files and fake `rate_limits`. The self-test does not read real Claude Code data and does not write to the normal statusline snapshot path.
 
@@ -22,16 +22,9 @@ npm run build
 node dist/index.js doctor --json
 ```
 
-The JSON report is intended for bug reports and data-source issues. It excludes or redacts:
+The JSON report is intended for bug reports and data-source issues. It excludes or redacts account identifiers, raw source references, raw local file content, and local filesystem paths — see [Privacy](privacy.md) for the full data boundary. It also includes per-snapshot freshness reasons, such as whether a snapshot is fresh, source-marked stale, or expired.
 
-- Account identifiers
-- Raw source references
-- Raw local file content
-- Local filesystem paths
-
-It also includes per-snapshot freshness reasons, such as whether a snapshot is fresh, source-marked stale, or expired.
-
-Always review the output before posting it publicly. The report should not contain prompts, responses, source code, credentials, browser cookies, session IDs, transcript paths, workspace paths, or account identifiers.
+Always review the output before posting it publicly.
 
 ## Exit Codes
 

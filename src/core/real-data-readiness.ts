@@ -1,3 +1,4 @@
+import { windowLabel } from "./quota-state.js";
 import type {
   AgentSummary,
   DoctorCheck,
@@ -35,7 +36,7 @@ export function buildRealDataReadiness(
     checks.push({
       provider: "local",
       agent: "doctor",
-      displayName: "Doctor",
+      displayName: "Diagnostics",
       status: "fail",
       message: "Blocking diagnostics must pass before a real-data trial.",
       action: "Run the normal doctor command and fix any failed checks first."
@@ -145,17 +146,4 @@ export function hasBlockingDiagnosticFailures(
     input.refreshResult.errors.length > 0 ||
     input.checks.some((check) => check.status === "fail")
   );
-}
-
-function windowLabel(windowType: string): string {
-  const labels: Record<string, string> = {
-    billing_cycle: "Billing cycle",
-    credits: "Credits",
-    daily: "Daily",
-    monthly: "Monthly",
-    session_5h: "5h window",
-    weekly: "Weekly"
-  };
-
-  return labels[windowType] ?? windowType;
 }

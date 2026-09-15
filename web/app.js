@@ -1,14 +1,38 @@
 import {
+  buildDisplayAgents as sharedBuildDisplayAgents,
+  agentSubscriptionTier,
+  claudeCodeAgentId,
+  claudeDesktopAgentId,
   clamp,
+  codexResetCreditReminderState,
+  codexResetCreditReminderStorageKey,
   createI18n,
+  defaultOnboardingPreferences,
+  defaultCodexResetCreditReminderPreferences,
   escapeHtml,
+  filterAgentsByOnboarding as sharedFilterAgentsByOnboarding,
+  firstRunOnboardingStorageKey,
+  formatUsed as sharedFormatUsed,
+  hasSnapshotMeterValue,
+  isFreshRealSnapshot,
   isSameSnapshot,
   isStaleSnapshot,
   languageStorageKey,
+  loadFirstRunOnboardingPreferences,
   mergeClaudeSnapshots,
   mergeSnapshotResetTiming,
+  normalizeCodexResetCreditReminderPreferences,
+  normalizeClaudeSources,
+  normalizeOnboardingPreferences,
+  preferredClaudeDashboardSource as sharedPreferredClaudeDashboardSource,
   primaryMeterClass,
-  resolveInitialLanguage
+  resolveInitialLanguage,
+  shouldShowAgentFamily as sharedShouldShowAgentFamily,
+  shouldShowClaudeCliWorkflow as sharedShouldShowClaudeCliWorkflow,
+  shouldShowClaudeDesktopWorkflow as sharedShouldShowClaudeDesktopWorkflow,
+  snapshotMeterClass,
+  snapshotMeterValue,
+  staleReasonLabel as sharedStaleReasonLabel
 } from "./shared.js";
 
 let currentLanguage = resolveInitialLanguage();
@@ -26,6 +50,8 @@ const state = {
   codexSnapshotFormDraft: undefined,
   codexSnapshotSaveStatus: undefined,
   codexSnapshotStatus: undefined,
+  codexResetCreditReminderPreferences: defaultCodexResetCreditReminderPreferences(),
+  codexResetCreditReminderSaveStatus: undefined,
   dashboardClosePreferencePending: false,
   dashboardClosePreferenceSaveStatus: undefined,
   dashboardClosePreferenceStatus: undefined,
@@ -74,11 +100,11 @@ const elements = {
   refreshStatus: document.querySelector("#refresh-status"),
   refreshRunList: document.querySelector("#refresh-run-list"),
   resetList: document.querySelector("#reset-list"),
+  resetCreditReminderContent: document.querySelector("#reset-credit-reminder-content"),
   settingsContent: document.querySelector("#settings-content"),
   settingsView: document.querySelector("#settings-view"),
   startupContent: document.querySelector("#startup-content"),
   startupPanel: document.querySelector("#startup-panel"),
-  feedbackPanel: document.querySelector("#feedback-panel"),
   tabs: document.querySelectorAll(".tab"),
   topbarStartupControl: document.querySelector("#topbar-startup-control"),
   views: document.querySelectorAll(".view")
@@ -152,6 +178,62 @@ document.addEventListener("change", (event) => {
       target.dataset.agentPreferenceClaudeSource,
       target.checked
     );
+    return;
+  }
+
+  if (
+    target instanceof HTMLInputElement &&
+    target.matches("[data-reset-credit-reminder-toggle]")
+  ) {
+    setCodexResetCreditReminderPreferences({
+      ...state.codexResetCreditReminderPreferences,
+      enabled: target.checked
+    });
+    return;
+  }
+
+  if (
+    target instanceof HTMLInputElement &&
+    target.matches("[data-reset-credit-reminder-days]")
+  ) {
+    const selectedDays = new Set(
+      normalizeCodexResetCreditReminderPreferences(
+        state.codexResetCreditReminderPreferences
+      ).daysBefore
+    );
+    const day = Number(target.value);
+
+    if (target.checked) {
+      selectedDays.add(day);
+    } else {
+      selectedDays.delete(day);
+    }
+
+    setCodexResetCreditReminderPreferences({
+      ...state.codexResetCreditReminderPreferences,
+      daysBefore: [...selectedDays]
+    });
+    return;
+  }
+
+  if (
+    target instanceof HTMLInputElement &&
+    target.matches("[data-reset-credit-custom-days]")
+  ) {
+    const customDays = Number(target.value);
+    if (Number.isFinite(customDays) && customDays >= 1 && customDays <= 30) {
+      const selectedDays = new Set(
+        normalizeCodexResetCreditReminderPreferences(
+          state.codexResetCreditReminderPreferences
+        ).daysBefore
+      );
+      [1, 3, 7, 14].forEach((days) => selectedDays.delete(days));
+      selectedDays.add(Math.round(customDays));
+      setCodexResetCreditReminderPreferences({
+        ...state.codexResetCreditReminderPreferences,
+        daysBefore: [...selectedDays]
+      });
+    }
     return;
   }
 
@@ -426,7 +508,9 @@ function scrollToRequestedTarget() {
   }
 
   window.requestAnimationFrame(() => {
-    document.getElementById(targetId)?.scrollIntoView({
+    const scrollTarget = document.getElementById(targetId);
+    openAncestorDetails(scrollTarget);
+    scrollTarget?.scrollIntoView({
       behavior: "smooth",
       block: "start"
     });
@@ -436,8 +520,18 @@ function scrollToRequestedTarget() {
 function scrollToSelector(selector) {
   window.requestAnimationFrame(() => {
     const scrollTarget = document.querySelector(selector);
+    openAncestorDetails(scrollTarget);
     scrollTarget?.scrollIntoView({ behavior: "smooth", block: "start" });
   });
+}
+
+function openAncestorDetails(element) {
+  let ancestor = element?.closest("details");
+
+  while (ancestor) {
+    ancestor.open = true;
+    ancestor = ancestor.parentElement?.closest("details");
+  }
 }
 
 async function load() {
@@ -479,6 +573,8 @@ async function load() {
   const trialReadinessPayload = await trialReadinessResponse.json();
 
   state.agents = agentsPayload.agents ?? [];
+  state.codexResetCreditReminderPreferences =
+    loadCodexResetCreditReminderPreferences();
   state.codexSnapshotStatus = codexSnapshotPayload.status;
   state.dashboardClosePreferenceStatus = dashboardClosePreference;
   state.desktopShortcutsStatus = desktopShortcutsPayload.status;
@@ -547,26 +643,6 @@ async function loadDashboardClosePreferenceStatus() {
   }
 }
 
-async function loadFirstRunOnboardingPreferences() {
-  if (window.aiqdDesktop?.getFirstRunOnboarding) {
-    try {
-      return normalizeOnboardingPreferences(
-        await window.aiqdDesktop.getFirstRunOnboarding()
-      );
-    } catch {
-      return defaultOnboardingPreferences();
-    }
-  }
-
-  try {
-    return normalizeOnboardingPreferences(
-      JSON.parse(window.localStorage?.getItem("aiqd:first-run-onboarding:v1") ?? "null")
-    );
-  } catch {
-    return defaultOnboardingPreferences();
-  }
-}
-
 async function saveFirstRunOnboardingPreferences(preferences) {
   const normalized = normalizeOnboardingPreferences(preferences);
 
@@ -577,25 +653,10 @@ async function saveFirstRunOnboardingPreferences(preferences) {
   }
 
   window.localStorage?.setItem(
-    "aiqd:first-run-onboarding:v1",
+    firstRunOnboardingStorageKey,
     JSON.stringify(normalized)
   );
   return normalized;
-}
-
-function defaultOnboardingPreferences() {
-  return {
-    agents: {
-      claude: true,
-      codex: true
-    },
-    claudeSources: {
-      cli: false,
-      desktop: true
-    },
-    claudeSource: "desktop",
-    completed: false
-  };
 }
 
 function onboardingDraftFromPreferences(preferences) {
@@ -611,53 +672,6 @@ function onboardingDraftFromPreferences(preferences) {
       desktop: normalized.claudeSources.desktop
     },
     claudeSource: normalized.claudeSource
-  };
-}
-
-function normalizeOnboardingPreferences(preferences) {
-  const fallback = defaultOnboardingPreferences();
-  const value = preferences && typeof preferences === "object" ? preferences : {};
-  const agents = value.agents && typeof value.agents === "object" ? value.agents : {};
-  const claudeSources = normalizeClaudeSources(value, fallback.claudeSources);
-  const claudeSource = claudeSources.desktop ? "desktop" : "cli";
-
-  return {
-    agents: {
-      claude: agents.claude !== false,
-      codex: agents.codex !== false
-    },
-    claudeSources,
-    claudeSource,
-    completed: value.completed === true
-  };
-}
-
-function normalizeClaudeSources(value, fallback) {
-  const sources =
-    value?.claudeSources && typeof value.claudeSources === "object"
-      ? value.claudeSources
-      : undefined;
-  const legacySource =
-    value?.claudeSource === "cli" || value?.claudeSource === "desktop"
-      ? value.claudeSource
-      : undefined;
-
-  let desktop =
-    sources?.desktop === true ||
-    (sources?.desktop !== false && !sources && legacySource !== "cli") ||
-    (!sources && !legacySource && fallback.desktop === true);
-  let cli =
-    sources?.cli === true ||
-    (!sources && legacySource === "cli") ||
-    (!sources && !legacySource && fallback.cli === true);
-
-  if (!desktop && !cli) {
-    desktop = true;
-  }
-
-  return {
-    cli,
-    desktop
   };
 }
 
@@ -824,8 +838,8 @@ function renderFirstRunOnboarding() {
           <p class="first-run-modal-lede">${escapeHtml(
             step === "claude"
               ? tx(
-                  "You can choose both. When Desktop is selected, AIQD uses it as the normal source.",
-                  "可以多选；勾选 Desktop 时，AIQD 会把它作为常规来源。"
+                  "You can pick both. If Desktop is checked, AIQD shows that one by default.",
+                  "两个都可以选；如果勾选了 Desktop，AIQD 会默认显示它。"
                 )
               : tx(
                   "AIQD will only show the agents you choose. You can change this later in Settings.",
@@ -857,8 +871,8 @@ function renderOnboardingAgentStep(draft) {
           <strong>Codex</strong>
           <small>${escapeHtml(
             tx(
-              "Show Codex quota and local diagnostics.",
-              "显示 Codex 额度和本地诊断。"
+              "Show Codex's remaining quota.",
+              "显示 Codex 的剩余额度。"
             )
           )}</small>
         </span>
@@ -871,8 +885,8 @@ function renderOnboardingAgentStep(draft) {
           <strong>Claude</strong>
           <small>${escapeHtml(
             tx(
-              "Show Claude quota. Source selection is next.",
-              "显示 Claude 额度；下一步选择来源。"
+              "Show Claude's remaining quota. You'll pick Desktop or CLI next.",
+              "显示 Claude 的剩余额度，下一步选择用 Desktop 还是 CLI。"
             )
           )}</small>
         </span>
@@ -924,8 +938,8 @@ function renderOnboardingClaudeStep(draft) {
             <strong>Claude Code CLI</strong>
             <small>${escapeHtml(
               tx(
-                "Optional. Use this only if you want Claude Code's statusline snapshot path.",
-                "可选。只有你想使用 Claude Code 的状态栏快照通道时才需要。"
+                "Optional. Check this if you use Claude Code in a terminal.",
+                "可选。如果你在终端里用 Claude Code，勾选这个。"
               )
             )}</small>
           </span>
@@ -971,6 +985,7 @@ function render() {
   });
   renderRefreshStatus();
   renderTopbarStartupControl();
+  syncTopbarActionWidths();
   renderAgents();
   renderResets();
   renderEvents();
@@ -981,6 +996,7 @@ function render() {
   renderCodexSnapshotSettings();
   renderSettings();
   renderAgentPreferencesSettings();
+  renderCodexResetCreditReminderSettings();
   renderDesktopStartupSettings();
   renderDashboardCloseSettings();
   renderPathSettings();
@@ -989,6 +1005,20 @@ function render() {
   arrangeSettingsPanels();
   scheduleStatuslineWatch();
 }
+
+function syncTopbarActionWidths() {
+  const actions = document.querySelector(".topbar-actions");
+  const primary = document.querySelector(".topbar-primary-actions");
+  const startup = elements.topbarStartupControl;
+
+  if (!actions || !primary || !startup) {
+    return;
+  }
+
+  startup.style.width = `${primary.getBoundingClientRect().width}px`;
+}
+
+window.addEventListener("resize", syncTopbarActionWidths);
 
 function arrangeSettingsPanels() {
   const container = elements.settingsView;
@@ -1004,7 +1034,6 @@ function arrangeSettingsPanels() {
   ].filter(Boolean);
   const preferencePanels = [
     elements.startupPanel,
-    elements.feedbackPanel,
     elements.advancedSettingsPanel
   ].filter(Boolean);
   const setupComplete = state.trialReadiness?.ok === true;
@@ -1040,7 +1069,7 @@ async function runRefresh(successMessage) {
   elements.refreshButton.textContent = tx("Refreshing", "刷新中");
   state.refreshStatus = {
     kind: "pending",
-    message: tx("Refreshing local quota sources.", "正在刷新本地额度数据源。")
+    message: tx("Refreshing local quota sources.", "正在刷新本地额度来源。")
   };
   renderRefreshStatus();
 
@@ -1332,98 +1361,19 @@ function renderAgents() {
 }
 
 function filterAgentsByOnboarding(agents) {
-  return agents.filter((agent) => {
-    if (agent.agent === "codex") {
-      return shouldShowAgentFamily("codex");
-    }
-
-    if (agent.agent === "claude-code") {
-      return shouldShowClaudeCliWorkflow();
-    }
-
-    if (agent.agent === "claude-desktop") {
-      return shouldShowClaudeDesktopWorkflow();
-    }
-
-    if (agent.provider === "anthropic" || agent.agent.startsWith("claude")) {
-      return shouldShowAgentFamily("claude");
-    }
-
-    return true;
-  });
+  return sharedFilterAgentsByOnboarding(agents, state.onboardingPreferences);
 }
 
 function shouldShowAgentFamily(family) {
-  const preferences = state.onboardingPreferences;
-
-  if (!preferences?.completed) {
-    return true;
-  }
-
-  if (family === "codex") {
-    return preferences.agents.codex !== false;
-  }
-
-  if (family === "claude") {
-    return preferences.agents.claude !== false;
-  }
-
-  return true;
-}
-
-function preferredClaudeSource() {
-  if (!state.onboardingPreferences?.completed) {
-    return undefined;
-  }
-
-  return state.onboardingPreferences.claudeSources.desktop ? "desktop" : "cli";
-}
-
-function selectedClaudeSources() {
-  return normalizeOnboardingPreferences(state.onboardingPreferences).claudeSources;
+  return sharedShouldShowAgentFamily(family, state.onboardingPreferences);
 }
 
 function shouldShowClaudeDesktopWorkflow() {
-  if (!shouldShowAgentFamily("claude")) {
-    return false;
-  }
-
-  if (!state.onboardingPreferences?.completed) {
-    return true;
-  }
-
-  return selectedClaudeSources().desktop;
+  return sharedShouldShowClaudeDesktopWorkflow(state.onboardingPreferences);
 }
 
 function shouldShowClaudeCliWorkflow() {
-  if (!shouldShowAgentFamily("claude")) {
-    return false;
-  }
-
-  if (!state.onboardingPreferences?.completed) {
-    return true;
-  }
-
-  const sources = selectedClaudeSources();
-  return sources.cli && !sources.desktop;
-}
-
-function preferredClaudeDashboardSource() {
-  if (!state.onboardingPreferences?.completed) {
-    return undefined;
-  }
-
-  const sources = selectedClaudeSources();
-
-  if (sources.desktop) {
-    return "desktop";
-  }
-
-  if (sources.cli) {
-    return "cli";
-  }
-
-  return undefined;
+  return sharedShouldShowClaudeCliWorkflow(state.onboardingPreferences);
 }
 
 // The dashboard shows one Claude card, not two: Claude Code CLI and Claude
@@ -1432,80 +1382,16 @@ function preferredClaudeDashboardSource() {
 // actually usable right now; Doctor and Settings still show each source's
 // own status separately for troubleshooting.
 function buildDisplayAgents(agents) {
-  const claudeCode = agents.find((agent) => agent.agent === "claude-code");
-  const claudeDesktop = agents.find((agent) => agent.agent === "claude-desktop");
-
-  if (!claudeCode && !claudeDesktop) {
-    return agents;
-  }
-
-  const winner = pickPrimaryClaudeAgent(claudeCode, claudeDesktop);
-  const sources = [claudeCode, claudeDesktop].filter(Boolean);
-  const snapshots = mergeClaudeSnapshots(winner.snapshots ?? [], sources);
-  const primarySnapshot = mergeSnapshotResetTiming(
-    winner.primarySnapshot,
-    sources.flatMap((source) => source.snapshots ?? [])
+  return sharedBuildDisplayAgents(
+    agents,
+    sharedPreferredClaudeDashboardSource(state.onboardingPreferences)
   );
-  const merged = {
-    ...winner,
-    agent: "claude",
-    displayName: "Claude",
-    primarySnapshot,
-    snapshots,
-    shortName: "Claude"
-  };
-
-  return agents
-    .filter((agent) => agent.agent !== "claude-code" && agent.agent !== "claude-desktop")
-    .concat([merged]);
-}
-
-function pickPrimaryClaudeAgent(claudeCode, claudeDesktop) {
-  const preferredSource = preferredClaudeDashboardSource();
-
-  if (preferredSource === "desktop" && claudeDesktop) {
-    return claudeDesktop;
-  }
-
-  if (preferredSource === "cli" && claudeCode) {
-    return claudeCode;
-  }
-
-  if (!claudeDesktop) {
-    return claudeCode;
-  }
-
-  if (!claudeCode) {
-    return claudeDesktop;
-  }
-
-  const codeFresh = isFreshRealSnapshot(claudeCode.primarySnapshot);
-  const desktopFresh = isFreshRealSnapshot(claudeDesktop.primarySnapshot);
-
-  if (codeFresh !== desktopFresh) {
-    return codeFresh ? claudeCode : claudeDesktop;
-  }
-
-  if (codeFresh && desktopFresh) {
-    const codeAt = Date.parse(claudeCode.primarySnapshot?.observedAt ?? "") || 0;
-    const desktopAt = Date.parse(claudeDesktop.primarySnapshot?.observedAt ?? "") || 0;
-    return desktopAt > codeAt ? claudeDesktop : claudeCode;
-  }
-
-  if (claudeCode.primarySnapshot && !claudeDesktop.primarySnapshot) {
-    return claudeCode;
-  }
-
-  if (claudeDesktop.primarySnapshot && !claudeCode.primarySnapshot) {
-    return claudeDesktop;
-  }
-
-  return claudeCode;
 }
 
 function renderAgentCard(agent) {
-  const primary = agent.primarySnapshot;
+  const primary = dashboardPrimarySnapshot(agent);
   const status = agent.status ?? "unknown";
+  const subscriptionTier = agentSubscriptionTier(agent);
   const source = primary
     ? sourceLabel(primary.source)
     : tx("Unavailable", "不可用");
@@ -1518,7 +1404,14 @@ function renderAgentCard(agent) {
       <div class="agent-card-header">
         <div>
           <h3 class="agent-name">${escapeHtml(agent.displayName)}</h3>
-          <p class="agent-provider">${escapeHtml(agent.provider)}</p>
+          <p class="agent-provider">
+            <span>${escapeHtml(agent.provider)}</span>
+            ${
+              subscriptionTier
+                ? `<span class="agent-plan">${escapeHtml(subscriptionTier)}</span>`
+                : ""
+            }
+          </p>
         </div>
         <span class="badge ${status}">${escapeHtml(statusLabel(status))}</span>
       </div>
@@ -1526,7 +1419,8 @@ function renderAgentCard(agent) {
       ${quotaSummary}
 
       <div class="quota-lines">
-        ${renderSnapshotLines(agent)}
+        ${renderSnapshotLines(agent, primary)}
+        ${renderCodexResetCreditPanel(agent)}
         <div class="quota-line">
           <span class="label">${escapeHtml(tx("Source", "来源"))}</span>
           <span class="value">${escapeHtml(source)}</span>
@@ -1535,6 +1429,15 @@ function renderAgentCard(agent) {
       </div>
     </article>
   `;
+}
+
+function dashboardPrimarySnapshot(agent) {
+  const snapshots = agent.snapshots ?? [];
+  return (
+    snapshots.find((snapshot) => snapshot.windowType === "session_5h") ??
+    snapshots.find((snapshot) => snapshot.windowType === "weekly") ??
+    agent.primarySnapshot
+  );
 }
 
 function renderPrimaryQuotaSummary(primary, status) {
@@ -1580,17 +1483,23 @@ function renderStaleQuotaSummary(agent, snapshot) {
   const isClaudeCode = snapshot.source === "official_statusline";
   const isClaudeDesktop =
     agent.provider === "anthropic" && snapshot.source === "local_quota_snapshot";
+  const isCodex = agent.agent === "codex";
   const isMergedClaude = agent.agent === "claude" && agent.provider === "anthropic";
   const detail = isClaudeCode && isMergedClaude
     ? tx(
-        "This is not zero quota. AIQD only has an old Claude Code statusline snapshot; Claude Desktop local usage history can replace it after a fresh sample.",
-        "这不是额度用完。AIQD 只剩一条旧的 Claude Code 状态栏快照；Claude Desktop 记录新的用量样本后，本地用量文件可以替代它。"
+        "This is not zero quota. AIQD just has old Claude Code data; opening Claude Desktop once can replace it with fresh data.",
+        "这不是额度用完。只是 AIQD 手上的 Claude Code 数据比较旧了；打开一次 Claude Desktop，就能换成更新的数据。"
       )
     : isClaudeCode
     ? tx(
-        "This is not zero quota. AIQD only has an old Claude Code statusline snapshot.",
-        "这不是额度用完。AIQD 只剩一条旧的 Claude Code 状态栏快照。"
+        "This is not zero quota. AIQD just has old Claude Code data.",
+        "这不是额度用完。只是 AIQD 手上的 Claude Code 数据比较旧了。"
       )
+    : isCodex
+      ? tx(
+          "This is not zero quota. The last Codex CLI record is too old to use.",
+          "这不是额度用完。上一条 Codex CLI 记录已经过旧，不能继续使用。"
+        )
     : isClaudeDesktop
       ? tx(
           "This is not zero quota. AIQD only has an old Claude Desktop usage sample.",
@@ -1602,14 +1511,19 @@ function renderStaleQuotaSummary(agent, snapshot) {
         );
   const action = isClaudeCode && isMergedClaude
     ? tx(
-        "Open Claude Desktop and use it once so AIQD can read its local plan usage file, then refresh AIQD. Claude Code CLI is optional.",
-        "打开 Claude Desktop 并正常使用一次，让 AIQD 读取它的本地用量文件，然后刷新 AIQD。Claude Code CLI 只是可选来源。"
+        "Open Claude Desktop and use it once, then refresh AIQD. Claude Code is optional.",
+        "打开 Claude Desktop 并使用一次，然后刷新 AIQD。Claude Code 只是可选来源。"
       )
     : isClaudeCode
     ? tx(
-        "Open Claude Code CLI once so its statusline can send a fresh snapshot, then refresh AIQD.",
-        "打开一次 Claude Code CLI，让状态栏发送新的快照，然后刷新 AIQD。"
+        "Open Claude Code once, then refresh AIQD.",
+        "打开一次 Claude Code，然后刷新 AIQD。"
       )
+    : isCodex
+      ? tx(
+          "Use Codex once so it records fresh quota data, then click Refresh.",
+          "请先使用一次 Codex，让它记录最新额度数据，然后再点击“刷新”。"
+        )
     : isClaudeDesktop
       ? tx(
           "Open Claude Desktop so it records a new usage sample, then refresh AIQD.",
@@ -1617,7 +1531,7 @@ function renderStaleQuotaSummary(agent, snapshot) {
         )
       : tx(
           "Refresh the source or record a new visible quota value.",
-          "刷新数据源，或重新记录一次可见额度。"
+          "刷新额度来源，或重新记录一次可见额度。"
         );
 
   return `
@@ -1631,7 +1545,7 @@ function renderStaleQuotaSummary(agent, snapshot) {
       )}">
         <span>${escapeHtml(tx("Last source", "上次来源"))}</span>
         <strong>${escapeHtml(source)}</strong>
-        <span>${escapeHtml(tx("Why hidden", "为什么隐藏额度"))}</span>
+        <span>${escapeHtml(tx("Reported reset", "报告的重置时间"))}</span>
         <strong>${escapeHtml(reset)}</strong>
       </div>
       <p class="stale-quota-action">${escapeHtml(action)}</p>
@@ -1639,10 +1553,90 @@ function renderStaleQuotaSummary(agent, snapshot) {
   `;
 }
 
+function renderCodexResetCreditPanel(agent) {
+  if (agent.provider !== "openai" || agent.agent !== "codex") {
+    return "";
+  }
+
+  const reminder = codexResetCreditReminderState(
+    agent.resetCredits,
+    state.codexResetCreditReminderPreferences
+  );
+  const credits = reminder.credits;
+  const statusClass = reminder.withinReminder ? "warning" : "healthy";
+  const summary = credits.length > 0
+    ? tx("{count} available", "可用 {count} 次", { count: credits.length })
+    : tx("No local data", "本地未发现数据");
+  const next = reminder.nextCredit
+    ? tx("Next expires {time}", "最近到期：{time}", {
+        time: formatTimestamp(reminder.nextCredit.expiresAt)
+      })
+    : tx("No local reset-credit source", "本地未发现重置额度来源");
+
+  return `
+    <section class="reset-credit-panel ${escapeHtml(statusClass)}">
+      <div class="reset-credit-header">
+        <div>
+          <strong>${escapeHtml(tx("Reset credits", "重置额度"))}</strong>
+          <span>${escapeHtml(next)}</span>
+        </div>
+        <span class="badge ${escapeHtml(statusClass)}">${escapeHtml(summary)}</span>
+      </div>
+      ${
+        reminder.withinReminder
+          ? `<div class="reset-credit-warning">${escapeHtml(
+              tx(
+                "{count} reset credit{plural} expire soon.",
+                "{count} 个重置额度即将到期。",
+                {
+                  count: countCreditsWithinReminder(reminder),
+                  plural: countCreditsWithinReminder(reminder) === 1 ? "" : "s"
+                }
+              )
+            )}</div>`
+          : ""
+      }
+      ${
+        credits.length > 0
+          ? `<div class="reset-credit-list">${credits
+              .map(renderCodexResetCreditRow)
+              .join("")}</div>`
+          : `<p class="reset-credit-empty">${escapeHtml(
+              tx(
+                "AIQD has not found local Codex reset-credit data yet. Open or refresh a Codex task that can read usage limits, then refresh AIQD.",
+                "AIQD 还没有找到本地 Codex 重置额度数据。打开或刷新一次能读取使用限额的 Codex 任务后，再刷新 AIQD。"
+              )
+            )}</p>`
+      }
+    </section>
+  `;
+}
+
+function renderCodexResetCreditRow(credit) {
+  return `
+    <div class="reset-credit-row">
+      <span>${escapeHtml(resetCreditTitle(credit))}</span>
+      <time datetime="${escapeHtml(credit.expiresAt)}">${escapeHtml(
+        tx("Expires {time}", "{time} 到期", {
+          time: formatTimestamp(credit.expiresAt, { long: true })
+        })
+      )}</time>
+    </div>
+  `;
+}
+
+function resetCreditTitle(credit) {
+  if (credit.title === "Full reset") {
+    return tx("Full reset", "完全重置");
+  }
+
+  return credit.title ?? tx("Reset credit", "重置额度");
+}
+
 function renderObservedLine(snapshot) {
   return `
     <div class="quota-line">
-      <span class="label">${escapeHtml(tx("Observed", "观测时间"))}</span>
+      <span class="label">${escapeHtml(tx("Updated", "更新时间"))}</span>
       <span class="value observed-value">
         <time datetime="${escapeHtml(snapshot.observedAt)}">${escapeHtml(
           formatRelative(snapshot.observedAt)
@@ -1679,21 +1673,10 @@ function renderStaleNote(snapshot) {
 }
 
 function staleReasonLabel(snapshot) {
-  if (snapshot?.freshness?.reason === "expired") {
-    return tx(
-      "past the reported reset time",
-      "已超过报告的重置时间"
-    );
-  }
-
-  if (snapshot?.freshness?.reason === "source_marked_stale" || snapshot?.stale) {
-    return tx("marked stale by source", "数据源标记为过期");
-  }
-
-  return tx("needs fresh data", "需要新数据");
+  return sharedStaleReasonLabel(snapshot, tx);
 }
 
-function renderSnapshotLines(agent) {
+function renderSnapshotLines(agent, primary) {
   const snapshots = agent.snapshots;
 
   if (!snapshots || snapshots.length === 0) {
@@ -1701,8 +1684,8 @@ function renderSnapshotLines(agent) {
     const action =
       emptyState?.action ??
       tx(
-        "Open Doctor for source checks and refresh history.",
-        "打开诊断查看数据源检查和刷新历史。"
+        "Open Diagnostics for source checks and refresh history.",
+        "打开诊断查看额度来源检查和刷新历史。"
       );
     const emptyText = agentEmptyText(agent);
 
@@ -1715,8 +1698,18 @@ function renderSnapshotLines(agent) {
     `;
   }
 
-  return snapshots
-    .filter((snapshot) => !isSameSnapshot(snapshot, agent.primarySnapshot))
+  const windowOrder = new Map([
+    ["session_5h", 0],
+    ["weekly", 1]
+  ]);
+
+  return [...snapshots]
+    .filter((snapshot) => !isSameSnapshot(snapshot, primary))
+    .sort(
+      (left, right) =>
+        (windowOrder.get(left.windowType) ?? 2) -
+        (windowOrder.get(right.windowType) ?? 2)
+    )
     .map((snapshot) =>
       renderQuotaWindowRow(snapshot, {
         showMeter: !isStaleSnapshot(snapshot)
@@ -1830,47 +1823,6 @@ function renderSnapshotMeter(snapshot) {
   `;
 }
 
-function hasSnapshotMeterValue(snapshot) {
-  return Boolean(
-    typeof snapshot?.remainingPercent === "number" ||
-      (typeof snapshot?.remaining === "number" &&
-        typeof snapshot?.total === "number" &&
-        snapshot.total > 0)
-  );
-}
-
-function snapshotMeterValue(snapshot) {
-  if (!snapshot) {
-    return 0;
-  }
-
-  if (isStaleSnapshot(snapshot)) {
-    return 0;
-  }
-
-  if (typeof snapshot.remainingPercent === "number") {
-    return clamp(snapshot.remainingPercent, 0, 100);
-  }
-
-  if (
-    typeof snapshot.remaining === "number" &&
-    typeof snapshot.total === "number" &&
-    snapshot.total > 0
-  ) {
-    return clamp((snapshot.remaining / snapshot.total) * 100, 0, 100);
-  }
-
-  return 0;
-}
-
-function snapshotMeterClass(snapshot) {
-  if (snapshot.windowType === "session_5h") {
-    return "session";
-  }
-
-  return snapshot.stale ? "stale" : "standard";
-}
-
 function primaryRemainingLabel(snapshot) {
   if (!snapshot) {
     return tx("remaining", "剩余");
@@ -1898,7 +1850,7 @@ function formatRemainingText(snapshot) {
 }
 
 function renderResets() {
-  const snapshots = filterAgentsByOnboarding(state.agents)
+  const snapshots = buildDisplayAgents(filterAgentsByOnboarding(state.agents))
     .flatMap((agent) =>
       (agent.snapshots ?? []).map((snapshot) => ({
         agent: agent.displayName,
@@ -2009,52 +1961,25 @@ function renderDoctorChecklist() {
   }
 
   const items = buildDoctorChecklistItems();
-  const sourceItems = items.filter((item) => item.countsTowardReady);
-  const readyCount = sourceItems.filter((item) => item.state === "pass").length;
-  const totalCount = sourceItems.length;
-  const hasSupportingIssue = items.some(
-    (item) =>
-      !item.countsTowardReady && (item.state === "fail" || item.state === "warn")
+  const hasIssue = items.some(
+    (item) => item.state === "warn" || item.state === "fail"
   );
-  const nextItem =
-    items.find((item) => item.state === "fail") ??
-    items.find((item) => item.state === "warn") ??
-    items.find((item) => item.state === "info");
+  const sourceItems = items.filter((item) => item.countsTowardReady);
+  const allReady =
+    sourceItems.length > 0 && sourceItems.every((item) => item.state === "pass");
 
   if (elements.doctorChecklistScore) {
-    elements.doctorChecklistScore.textContent = tx(
-      "{ready}/{total} ready",
-      "{ready}/{total} 就绪",
-      {
-        ready: readyCount,
-        total: totalCount
-      }
-    );
+    elements.doctorChecklistScore.textContent = hasIssue
+      ? tx("Needs attention", "需要处理")
+      : allReady
+        ? tx("All connected", "都已连接")
+        : tx("Setting up", "设置中");
     elements.doctorChecklistScore.className = `badge ${
-      readyCount === totalCount && !hasSupportingIssue ? "healthy" : "warning"
+      hasIssue ? "warning" : allReady ? "healthy" : "stale"
     }`;
   }
 
   elements.doctorChecklist.innerHTML = `
-    <div class="real-data-summary doctor-checklist-summary">
-      <div class="setup-score">
-        <strong>${readyCount}/${totalCount}</strong>
-        <span>${escapeHtml(tx("quota sources ready", "额度来源就绪"))}</span>
-      </div>
-      <div>
-        <strong>${escapeHtml(
-          doctorChecklistSummaryTitle(readyCount, totalCount, hasSupportingIssue)
-        )}</strong>
-        <div class="settings-detail">${escapeHtml(
-          nextItem?.nextAction ??
-            tx(
-              "Real-data sources are ready for a local trial.",
-              "真实数据来源已经可以用于本地试用。"
-            )
-        )}</div>
-        ${nextItem?.command ? renderInlineCommand(nextItem.command) : ""}
-      </div>
-    </div>
     <div class="setup-overview-list doctor-checklist-list">
       ${items.map(renderDoctorChecklistItem).join("")}
     </div>
@@ -2069,52 +1994,63 @@ function buildDoctorChecklistItems() {
   }
 
   if (shouldShowAgentFamily("claude")) {
-    if (shouldShowClaudeCliWorkflow()) {
-      items.push(buildDoctorClaudeChecklistItem());
-    }
-
-    if (shouldShowClaudeDesktopWorkflow()) {
-      items.push(buildDoctorClaudeDesktopChecklistItem());
-    }
+    items.push(buildDoctorClaudeChecklistItem());
   }
 
-  items.push(buildDoctorRefreshChecklistItem(), buildDoctorPathChecklistItem());
+  items.push(buildDoctorRefreshChecklistItem());
 
   return items;
 }
 
+// One row per app: silent when connected, one line explaining the fix when
+// it is not. Detailed per-field diagnostics live in Settings and the
+// technical report below, not repeated here.
 function buildDoctorCodexChecklistItem() {
   const item = buildCodexOverviewItem();
+  const ready = item.state === "pass";
 
   return {
-    ...item,
-    actionLabel: item.state === "pass" ? tx("Review", "查看") : tx("Settings", "设置"),
+    actionLabel: tx("Settings", "设置"),
     actionView: "settings",
-    label: tx("Codex quota source", "Codex 额度来源"),
+    badgeText: ready
+      ? tx("Connected", "已连接")
+      : item.state === "warn"
+        ? tx("Needs attention", "需要处理")
+        : tx("Waiting", "等待中"),
+    countsTowardReady: true,
+    label: "Codex",
+    state: item.state,
+    statusLine: ready ? "" : item.nextAction,
     target: "#codex-snapshot-content"
   };
 }
 
 function buildDoctorClaudeChecklistItem() {
-  const item = buildClaudeOverviewItem();
+  const showCli = shouldShowClaudeCliWorkflow();
+  const showDesktop = shouldShowClaudeDesktopWorkflow();
+  const desktopItem = showDesktop ? buildClaudeDesktopOverviewItem() : undefined;
+  const cliItem = showCli ? buildClaudeOverviewItem() : undefined;
+  const desktopReady = desktopItem?.state === "pass";
+  const cliReady = cliItem?.state === "pass";
+  const ready = desktopReady || cliReady;
+  const primary = desktopReady ? desktopItem : cliReady ? cliItem : desktopItem ?? cliItem;
 
   return {
-    ...item,
-    actionLabel: item.state === "pass" ? tx("Review", "查看") : tx("Settings", "设置"),
+    actionLabel: tx("Settings", "设置"),
     actionView: "settings",
-    label: tx("Claude quota (CLI or Desktop)", "Claude 额度（CLI 或 Desktop）"),
-    target: "#settings-content"
-  };
-}
-
-function buildDoctorClaudeDesktopChecklistItem() {
-  const item = buildClaudeDesktopOverviewItem();
-
-  return {
-    ...item,
-    actionLabel: item.state === "pass" ? tx("Review", "查看") : tx("Settings", "设置"),
-    actionView: "settings",
-    label: tx("Claude Desktop file", "Claude Desktop 文件"),
+    badgeText: ready
+      ? tx("Connected", "已连接")
+      : primary?.state === "warn"
+        ? tx("Needs attention", "需要处理")
+        : tx("Waiting", "等待中"),
+    countsTowardReady: true,
+    label: "Claude",
+    state: primary?.state ?? "info",
+    statusLine: ready
+      ? desktopReady
+        ? tx("Via Claude Desktop", "通过 Claude Desktop")
+        : tx("Via Claude Code CLI", "通过 Claude Code CLI")
+      : (primary?.nextAction ?? ""),
     target: "#settings-content"
   };
 }
@@ -2127,19 +2063,15 @@ function buildDoctorRefreshChecklistItem() {
   if (!latestRun) {
     return {
       actionLabel: tx("Refresh now", "立即刷新"),
+      badgeText: tx("Not run yet", "尚未运行"),
       countsTowardReady: false,
-      detail: tx(
-        "No local refresh run has been recorded in this workspace yet.",
-        "这个工作区还没有记录过本地刷新。"
-      ),
-      label: tx("Refresh pipeline", "刷新流程"),
-      nextAction: tx(
-        "Run one refresh after setting up at least one quota source.",
-        "至少设置好一个额度来源后，运行一次刷新。"
-      ),
+      label: tx("Last refresh", "上次刷新"),
       refreshAction: true,
       state: "info",
-      status: tx("Not run yet", "尚未运行")
+      statusLine: tx(
+        "Set up at least one app above, then refresh.",
+        "先设置好上面至少一个来源，然后刷新。"
+      )
     };
   }
 
@@ -2148,36 +2080,21 @@ function buildDoctorRefreshChecklistItem() {
   return {
     actionLabel: hasErrors ? tx("View details", "查看详情") : tx("Refresh now", "立即刷新"),
     actionView: hasErrors ? "doctor" : undefined,
+    badgeText: hasErrors
+      ? tx("Needs attention", "需要处理")
+      : formatRelative(latestRun.observedAt),
     countsTowardReady: false,
-    detail: formatRefreshRunDetail(latestRun),
-    label: tx("Refresh pipeline", "刷新流程"),
-    nextAction: hasErrors
-      ? tx(
-          "Review the latest refresh errors before relying on the dashboard.",
-          "先查看最近一次刷新错误，再依赖仪表盘结果。"
-        )
-      : tx(
-          "Refresh is recording source diagnostics and saved-count summaries.",
-          "刷新流程正在记录来源诊断和保存数量摘要。"
-        ),
+    label: tx("Last refresh", "上次刷新"),
     refreshAction: !hasErrors,
     state: hasErrors ? "warn" : "pass",
-    status: tx("Last run {time}", "上次运行：{time}", {
-      time: formatRelative(latestRun.observedAt)
-    }),
+    statusLine: hasErrors
+      ? tx(
+          "{count} app(s) had a problem. Review the errors below.",
+          "{count} 个来源出了问题，请查看下面的错误详情。",
+          { count: latestRun.errors.length }
+        )
+      : "",
     target: hasErrors ? "#refresh-run-list" : undefined
-  };
-}
-
-function buildDoctorPathChecklistItem() {
-  const item = buildPathOverviewItem();
-
-  return {
-    ...item,
-    actionLabel: tx("Path settings", "路径设置"),
-    actionView: "settings",
-    label: tx("Local path config", "本地路径配置"),
-    target: "#paths-content"
   };
 }
 
@@ -2186,15 +2103,11 @@ function renderDoctorChecklistItem(item) {
     <div class="setup-overview-row doctor-checklist-row">
       <div>
         <strong>${escapeHtml(item.label)}</strong>
-        <div>${escapeHtml(item.status)}</div>
-        <div class="settings-detail">${escapeHtml(item.detail)}</div>
-        ${item.command ? renderInlineCommand(item.command) : ""}
+        ${item.statusLine ? `<div class="settings-detail">${escapeHtml(item.statusLine)}</div>` : ""}
       </div>
       <div class="setup-overview-actions doctor-checklist-actions">
-        <span class="badge ${doctorBadgeClass(item.state)}">${escapeHtml(
-          statusLabel(item.state)
-        )}</span>
-        ${renderDoctorChecklistAction(item)}
+        <span class="badge ${doctorBadgeClass(item.state)}">${escapeHtml(item.badgeText)}</span>
+        ${item.refreshAction || item.state !== "pass" ? renderDoctorChecklistAction(item) : ""}
       </div>
     </div>
   `;
@@ -2221,25 +2134,6 @@ function renderDoctorChecklistAction(item) {
       ${item.target ? `data-scroll-target="${escapeHtml(item.target)}"` : ""}
     >${escapeHtml(item.actionLabel)}</button>
   `;
-}
-
-function doctorChecklistSummaryTitle(readyCount, totalCount, hasSupportingIssue) {
-  if (readyCount === totalCount && hasSupportingIssue) {
-    return tx(
-      "Quota sources are ready; review setup warnings",
-      "额度来源已就绪；请查看设置警告"
-    );
-  }
-
-  if (readyCount === totalCount) {
-    return tx("Ready for a real-data trial", "真实数据试用已准备好");
-  }
-
-  if (readyCount === 0) {
-    return tx("Real-data setup is not ready yet", "真实数据设置尚未就绪");
-  }
-
-  return tx("One quota source is ready", "已有一个额度来源就绪");
 }
 
 function renderRefreshRuns() {
@@ -2353,7 +2247,7 @@ function renderEvents() {
     .map(
       (event) => `
         <div class="event-row">
-          <strong>${escapeHtml(event.agent)}</strong>
+          <strong>${escapeHtml(eventAgentDisplayName(event.agent))}</strong>
           <div>
             <div>${escapeHtml(eventTitle(event))}</div>
             <div class="event-detail">${escapeHtml(eventDetail(event))}</div>
@@ -2370,7 +2264,7 @@ function renderCodexSnapshotSettings() {
 
   if (!status) {
     elements.codexSnapshotContent.innerHTML = `<p class="empty">${escapeHtml(
-      tx("Codex quota source status unavailable.", "Codex 额度来源状态不可用。")
+      tx("Codex status unavailable.", "Codex 状态不可用。")
     )}</p>`;
     return;
   }
@@ -2380,16 +2274,29 @@ function renderCodexSnapshotSettings() {
   }
 
   const autoDetected = isAutoCodexSnapshot(getCodexPrimarySnapshot());
-  const fallbackNeeded = !autoDetected && status.readiness !== "ready";
+  const manualReady = status.readiness === "ready";
+  const ready = autoDetected || manualReady;
+  const needsAttention =
+    status.readiness === "expired" || status.readiness === "needs_attention";
+  const showForm = false;
 
   elements.codexSnapshotContent.innerHTML = `
-    ${renderCodexAutoDetectionStatus(status)}
-    ${renderCodexPrimaryNextAction(status)}
-    ${fallbackNeeded ? renderCodexSnapshotForm(status) : renderOptionalCodexFallback(status)}
+    ${renderCodexStatusRow({ ready, needsAttention })}
+    ${showForm ? renderCodexSnapshotForm(status) : ""}
 
     ${renderAdvancedDetails(
       tx("Codex technical details", "Codex 技术细节"),
       `
+        ${
+          ready
+            ? `<p class="panel-note">${escapeHtml(
+                tx(
+                  "You can still enter a value by hand if this ever looks wrong.",
+                  "如果这个数值看起来不对，你也可以在这里手动填写覆盖。"
+                )
+              )}</p>`
+            : ""
+        }
         <div class="settings-list">
           ${settingsRow(
             tx("Fallback file", "兜底文件"),
@@ -2414,9 +2321,6 @@ function renderCodexSnapshotSettings() {
           ${renderSetupChecks(status.checks)}
         </div>
 
-        ${renderCommandBlock(tx("Fallback command", "兜底命令"), status.writeCommand)}
-        ${renderCommandBlock(tx("Help command", "帮助命令"), status.helpCommand)}
-
         ${renderFieldPills(
           tx("Stored", "已保存"),
           status.savedFields,
@@ -2432,118 +2336,27 @@ function renderCodexSnapshotSettings() {
   `;
 }
 
-function renderCodexPrimaryNextAction(status) {
-  const autoDetected = isAutoCodexSnapshot(getCodexPrimarySnapshot());
-
-  if (autoDetected) {
-    return `
-      <div class="setup-watch-notice">
-        <div>
-          <strong>${escapeHtml(tx("Nothing else is required for Codex", "Codex 不需要继续配置"))}</strong>
-          <div class="settings-detail">${escapeHtml(
-            tx(
-              "Automatic CLI detection is already working. The manual fallback and command details below are optional troubleshooting tools.",
-              "自动 CLI 检测已经可用。下面的手动兜底和命令详情只是可选排障工具。"
-            )
-          )}</div>
-        </div>
-        <span class="badge healthy">${escapeHtml(tx("Done", "完成"))}</span>
-      </div>
-    `;
-  }
-
-  if (status.readiness === "ready") {
-    return `
-      <div class="setup-watch-notice">
-        <div>
-          <strong>${escapeHtml(tx("Codex fallback is ready", "Codex 兜底已就绪"))}</strong>
-          <div class="settings-detail">${escapeHtml(
-            tx(
-              "AIQD can use the saved fallback. Refresh after using Codex again; automatic CLI data will replace it when available.",
-              "AIQD 可以使用已保存的兜底值。之后使用 Codex 后再刷新；如果自动 CLI 数据可用，会自动替代兜底。"
-            )
-          )}</div>
-        </div>
-        <span class="badge healthy">${escapeHtml(tx("Ready", "就绪"))}</span>
-      </div>
-    `;
-  }
+function renderCodexStatusRow({ ready, needsAttention }) {
+  const badgeText = ready
+    ? tx("Connected", "已连接")
+    : needsAttention
+      ? tx("Needs attention", "需要处理")
+      : tx("Waiting", "等待中");
+  const detail = ready
+    ? ""
+    : needsAttention
+      ? tx(
+          "Use Codex once, then refresh. If nothing shows up, fill in the form below.",
+          "先用一次 Codex，然后刷新；还是没有就填下面的表单。"
+        )
+      : tx("Use Codex once, then refresh.", "先用一次 Codex，然后刷新。");
 
   return `
     <div class="setup-watch-notice">
-      <div>
-        <strong>${escapeHtml(tx("Codex needs one value", "Codex 还需要一个额度值"))}</strong>
-        <div class="settings-detail">${escapeHtml(
-          tx(
-            "First try Refresh after using Codex once. If automatic detection still cannot read quota, fill the fallback form below.",
-            "先使用 Codex 一次后点刷新。如果自动检测仍然读不到额度，再填写下面的兜底表单。"
-          )
-        )}</div>
-      </div>
-      <span class="badge warning">${escapeHtml(tx("Action needed", "需要处理"))}</span>
-    </div>
-  `;
-}
-
-function renderOptionalCodexFallback(status) {
-  return `
-    <details class="optional-settings-details">
-      <summary>
-        <span>${escapeHtml(tx("Optional manual fallback", "可选：手动兜底"))}</span>
-        <small>${escapeHtml(
-          tx(
-            "Use only if automatic Codex detection stops working.",
-            "只有自动检测不可用时才需要。"
-          )
-        )}</small>
-      </summary>
-      <div class="optional-settings-body">
-        ${renderCodexSnapshotForm(status)}
-      </div>
-    </details>
-  `;
-}
-
-function renderCodexAutoDetectionStatus(status) {
-  const snapshot = getCodexPrimarySnapshot();
-  const autoDetected = isAutoCodexSnapshot(snapshot);
-  const manualReady = status.readiness === "ready";
-  const badgeState = autoDetected ? "pass" : manualReady ? "warn" : "info";
-  const title = autoDetected
-    ? tx("Codex is being detected automatically", "Codex 正在自动检测")
-    : manualReady
-      ? tx("Manual fallback is currently active", "当前使用手动兜底")
-      : tx("Automatic Codex detection is waiting", "正在等待 Codex 自动检测");
-  const detail = autoDetected
-    ? tx(
-        "AIQD is reading Codex quota from local CLI rate_limits. You do not need to copy numbers by hand.",
-        "AIQD 正在从本地 CLI rate_limits 读取 Codex 额度；你不需要手动抄数字。"
-      )
-    : manualReady
-      ? tx(
-          "AIQD has a manual fallback value saved. Refresh after using Codex once; if CLI data appears, it will replace the fallback.",
-          "AIQD 已保存手动兜底值。使用 Codex 一次后刷新；如果出现 CLI 数据，它会替代兜底。"
-        )
-      : tx(
-          "After Codex CLI writes a supported rate_limits event, click Refresh. If this machine exposes no usable Codex quota data, use the fallback form below.",
-          "等 Codex CLI 写入支持的 rate_limits 事件后点击刷新。如果这台机器没有暴露可用 Codex 额度数据，再使用下面的兜底表单。"
-        );
-  const snapshotLine = snapshot ? formatSnapshotOverview(snapshot) : undefined;
-
-  return `
-    <div class="setup-watch-notice codex-source-notice">
-      <div>
-        <strong>${escapeHtml(title)}</strong>
-        <div class="settings-detail">${escapeHtml(detail)}</div>
-        ${snapshotLine ? `<div class="settings-detail">${escapeHtml(snapshotLine)}</div>` : ""}
-      </div>
-      <span class="badge ${doctorBadgeClass(badgeState)}">${escapeHtml(
-        autoDetected
-          ? tx("CLI", "CLI")
-          : manualReady
-            ? tx("Fallback", "兜底")
-            : tx("Waiting", "等待")
-      )}</span>
+      <div class="settings-detail">${detail ? escapeHtml(detail) : ""}</div>
+      <span class="badge ${
+        ready ? "healthy" : needsAttention ? "warning" : "stale"
+      }">${escapeHtml(badgeText)}</span>
     </div>
   `;
 }
@@ -2551,96 +2364,23 @@ function renderCodexAutoDetectionStatus(status) {
 function renderRealDataOverview() {
   const items = buildRealDataOverviewItems();
   const readiness = state.trialReadiness;
-  const showSetupDetails = Boolean(state.setupDetailTarget);
   const sourceItems = items.filter((item) => item.countsTowardReady);
   const readyCount = sourceItems.filter((item) => item.state === "pass").length;
   const totalCount = sourceItems.length;
+  const ready = readiness ? readiness.ok : readyCount === totalCount;
 
   if (elements.realDataScore) {
-    elements.realDataScore.textContent = readiness
-      ? readiness.ok
-        ? tx("ready", "就绪")
-        : tx("not ready", "未就绪")
-      : tx("{ready}/{total} ready", "{ready}/{total} 就绪", {
-          ready: readyCount,
-          total: totalCount
-        });
-    elements.realDataScore.className = `badge ${
-      readiness?.ok || (!readiness && readyCount === totalCount)
-        ? "healthy"
-        : "warning"
-    }`;
+    elements.realDataScore.textContent = ready
+      ? tx("ready", "就绪")
+      : tx("not ready", "未就绪");
+    elements.realDataScore.className = `badge ${ready ? "healthy" : "warning"}`;
   }
 
   if (!elements.realDataContent) {
     return;
   }
 
-  elements.realDataContent.innerHTML = `
-    ${renderInitialSetupFlow(items, readiness)}
-
-    ${
-      showSetupDetails
-        ? renderAdvancedDetails(
-            tx("Advanced readiness details", "高级就绪详情"),
-            `
-              ${readiness ? renderTrialReadinessChecks(readiness) : ""}
-              <div class="setup-overview-list">
-                ${items.map(renderRealDataOverviewItem).join("")}
-              </div>
-              ${readiness ? renderInlineCommand("npm run trial:ready") : ""}
-            `
-          )
-        : ""
-    }
-  `;
-}
-
-function renderTrialReadinessChecks(readiness) {
-  const checks = readiness.checks ?? [];
-
-  if (checks.length === 0) {
-    return "";
-  }
-
-  return `
-    <div class="setup-overview-list trial-readiness-list">
-      ${checks.map(renderTrialReadinessCheck).join("")}
-    </div>
-  `;
-}
-
-function renderTrialReadinessCheck(check) {
-  const text = localizedReadinessCheck(check);
-
-  return `
-    <div class="setup-overview-row trial-readiness-row">
-      <div>
-        <strong>${escapeHtml(readinessDisplayName(check))}</strong>
-        <div>${escapeHtml(text.message)}</div>
-        ${
-          text.action
-            ? `<div class="settings-detail">${escapeHtml(text.action)}</div>`
-            : ""
-        }
-      </div>
-      <span class="badge ${doctorBadgeClass(check.status)}">${escapeHtml(
-        statusLabel(check.status)
-      )}</span>
-    </div>
-  `;
-}
-
-function readinessDisplayName(check) {
-  if (!check?.displayName || currentLanguage !== "zh") {
-    return check?.displayName;
-  }
-
-  const labels = {
-    Mode: "模式"
-  };
-
-  return labels[check.displayName] ?? check.displayName;
+  elements.realDataContent.innerHTML = renderInitialSetupFlow(items, readiness);
 }
 
 function renderInitialSetupFlow(items, readiness) {
@@ -2796,12 +2536,10 @@ function buildInitialSetupModel(items, readiness) {
   const claudeCliInstallCommand =
     state.setupStatus?.claudeCliInstallCommand ??
     "winget install Anthropic.ClaudeCode";
-  const claudeCanUseWindowsInstaller = Boolean(
-    state.setupStatus?.hostPlatform === "win32" &&
-      claudeCliInstallCommand.includes("Anthropic.ClaudeCode")
-  );
   const canInstallClaude =
-    !claudeComplete && !claudeCliAvailable && claudeCanUseWindowsInstaller;
+    !claudeComplete &&
+    !claudeCliAvailable &&
+    canAutoInstallClaudeCli(state.setupStatus);
   const canConnectClaude = !claudeComplete && !claudeManaged;
   const claudeSetupAction = canInstallClaude
     ? "install"
@@ -2917,8 +2655,8 @@ function buildInitialSetupModel(items, readiness) {
                 )
               : claudeInputIssue
               ? tx(
-                  "AIQD receiver ran, but not with Claude session JSON.",
-                  "AIQD 接收器运行了，但输入不是 Claude session JSON。"
+                  "AIQD receiver ran, but did not receive Claude session JSON.",
+                  "AIQD 接收器运行了，但没有收到 Claude session JSON。"
                 )
               : claudeCliOnPath
               ? tx(
@@ -2955,29 +2693,27 @@ function buildInitialSetupModel(items, readiness) {
           "点击刷新，让 AIQD 扫描本地 Codex session rate_limits。"
         ),
         tx(
-          "Use the manual fallback below only if no CLI quota can be detected.",
-          "只有检测不到 CLI 额度时，才使用下方手动兜底。"
+          "Use Codex once, then refresh again if no CLI quota appears.",
+          "请先使用一次 Codex，然后再次刷新；如果仍没有额度数据，请查看诊断信息。"
         )
       ],
       complete: codexComplete,
       detail: tx(
-        "AIQD reads supported rate_limits from local Codex CLI session logs. Manual entry is kept only as a fallback.",
-        "AIQD 会从本地 Codex CLI session 日志读取支持的 rate_limits；手动录入只作为兜底。"
+        "AIQD reads supported rate_limits from local Codex CLI session logs.",
+        "AIQD 会从本地 Codex CLI session 日志自动读取支持的 rate_limits。"
       ),
       id: "codex",
       number: "1",
       outcome: tx(
-        "If rate_limits are found, the dashboard will show Codex as Official CLI. If not, this page will explain the fallback.",
-        "如果读到 rate_limits，仪表盘会把 Codex 显示为官方 CLI；如果没有读到，这里会说明兜底方式。"
+        "If rate_limits are found, the dashboard will show Codex as Official CLI. If not, use Codex once and refresh again.",
+        "如果读到 rate_limits，仪表盘会把 Codex 显示为官方 CLI；如果没有读到，请先使用一次 Codex 再刷新。"
       ),
       progressDetail: codexComplete
         ? buildCodexDoneDetail(codex)
         : tx("Waiting for Codex CLI quota detection.", "等待 Codex CLI 额度检测。"),
       refreshAction: !codexComplete,
-      secondaryActionLabel: codexComplete
-        ? undefined
-        : tx("Manual fallback", "手动兜底"),
-      secondaryTarget: codexComplete ? undefined : "#codex-snapshot-content",
+        secondaryActionLabel: undefined,
+      secondaryTarget: undefined,
       status: codexComplete
         ? tx("Done", "已完成")
         : codex?.status ?? tx("Waiting for Codex data", "等待 Codex 数据"),
@@ -3006,10 +2742,7 @@ function buildInitialSetupModel(items, readiness) {
                   "接入 Claude 数据"
                 )
         : claudeManaged
-          ? tx(
-              "I ran it; check",
-              "我已运行，检查"
-            )
+          ? tx("Check now", "立即检查")
           : tx("Open Claude setup", "打开 Claude 设置"),
       actionTitle: canAutoSetupClaude
         ? canInstallClaude
@@ -3586,7 +3319,7 @@ function claudeAutoStepStateLabel(stateValue) {
 function claudeAutoStepTitle(step) {
   const labels = {
     "claude-cli": tx("Claude Code CLI", "Claude Code CLI"),
-    statusline: tx("Local statusline capture", "本地 statusline 采集")
+    statusline: tx("Local usage capture", "本地用量采集")
   };
 
   return labels[step.id] ?? step.label;
@@ -3602,10 +3335,10 @@ function claudeAutoStepMessage(step) {
     "claude-cli:pass": "Claude Code CLI 安装器已经运行完成。",
     "claude-cli:skip": "已找到 claude 命令，不需要安装。",
     "claude-cli:warn": "当前平台不能安全自动安装，请按页面上的命令手动处理。",
-    "statusline:fail": "AIQD 没能写入 Claude Code statusline 设置。",
-    "statusline:pass": "AIQD 本地 statusline 采集已经安装。",
+    "statusline:fail": "AIQD 没能给 Claude Code 设置本地用量采集。",
+    "statusline:pass": "AIQD 本地用量采集已经安装。",
     "statusline:skip": "这一步已跳过。",
-    "statusline:warn": "检测到已有 Claude statusLine，AIQD 没有自动覆盖。"
+    "statusline:warn": "检测到 Claude Code 已经有自定义设置，AIQD 没有自动覆盖。"
   };
 
   return messages[`${step.id}:${step.state}`] ?? step.message;
@@ -3860,41 +3593,6 @@ function renderGuidedSecondaryAction(step) {
   `;
 }
 
-function localizedReadinessCheck(check) {
-  if (currentLanguage !== "zh") {
-    return {
-      action: check.action,
-      message: check.message
-    };
-  }
-
-  if (check.agent === "codex" && check.status === "fail") {
-    return {
-      action: "使用 Codex 一次后刷新，让 AIQD 读取本地 Codex CLI rate_limits；如果仍没有数据，再使用设置页的手动兜底。",
-      message: "Codex 还没有可用于试用的真实本地额度数据。"
-    };
-  }
-
-  if (check.agent === "claude-code" && check.status === "fail") {
-    return {
-      action: "安装本地 statusline sink 后，从 CLI/终端项目会话打开 Claude Code；普通 Claude 桌面应用不会发送这些字段。",
-      message: "Claude Code 还没有收到真实额度数据。"
-    };
-  }
-
-  if (check.agent === "doctor" && check.status === "fail") {
-    return {
-      action: "打开诊断页查看失败项，然后重新刷新。",
-      message: "本地诊断还有失败项。"
-    };
-  }
-
-  return {
-    action: check.action,
-    message: check.message
-  };
-}
-
 function buildRealDataOverviewItems() {
   const items = [];
 
@@ -3923,14 +3621,6 @@ function findAgent(agentId) {
 
 function getCodexPrimarySnapshot() {
   return findAgent("codex")?.primarySnapshot;
-}
-
-function isFreshRealSnapshot(snapshot) {
-  return Boolean(
-    snapshot &&
-      snapshot.source !== "demo" &&
-      snapshot.freshness?.status !== "stale"
-  );
 }
 
 function isAutoCodexSnapshot(snapshot) {
@@ -4012,8 +3702,8 @@ function buildCodexOverviewItem() {
       detailParts.length > 0
         ? detailParts.join(" / ")
         : tx(
-            "AIQD checks local Codex CLI session rate_limits first. Manual entry below is only a fallback.",
-            "AIQD 会先检查本地 Codex CLI session rate_limits；下面的手动录入只是兜底。"
+            "AIQD checks for Codex usage automatically first. The form below is only a backup.",
+            "AIQD 会先自动检查 Codex 用量，下面的表单只是备用方式。"
           ),
     id: "codex",
     label: "Codex",
@@ -4029,16 +3719,16 @@ function buildCodexOverviewItem() {
           )
       : needsAttention
         ? tx(
-            "Refresh after using Codex once. If no CLI quota appears, update the manual fallback.",
-            "使用 Codex 一次后刷新；如果仍没有 CLI 额度，再更新手动兜底。"
+            "Use Codex once, then refresh. If nothing shows up, fill in the form below.",
+            "先用一次 Codex，然后刷新；如果还是没有数据，就填写下面的表单。"
           )
         : tx(
-            "Refresh to detect local Codex CLI quota. Use the manual form only if detection is unavailable.",
-            "刷新以检测本地 Codex CLI 额度；只有检测不可用时才使用手动表单。"
+            "Refresh to detect your Codex usage automatically, or fill in the form below.",
+            "刷新以自动检测 Codex 用量，或者直接填写下面的表单。"
           ),
     state: ready ? "pass" : needsAttention ? "warn" : "info",
     status: autoDetected
-      ? tx("CLI detected", "CLI 已检测")
+      ? tx("Detected automatically", "已自动检测")
       : localizedReadinessLabel(status?.readinessLabel) ??
         tx("Waiting for Codex data", "等待 Codex 数据"),
     target: "#codex-snapshot-content"
@@ -4160,66 +3850,29 @@ function buildPathOverviewItem() {
     countsTowardReady: false,
     detail: hasLoadErrors
       ? status?.loadErrors?.join("\n") ??
-        tx("Local path config has warnings.", "本地路径配置有警告。")
+        tx("There's a problem with your file locations.", "文件位置有问题。")
       : configuredCount > 0
-        ? tx("{count} configured scan root(s)", "已配置 {count} 个扫描根目录", {
+        ? tx("{count} custom folder(s) added", "已添加 {count} 个自定义文件夹", {
             count: configuredCount
           })
-        : tx("Default local scan paths are active.", "默认本地扫描路径已启用。"),
+        : tx("Using the default file locations.", "正在使用默认文件位置。"),
     id: "local-paths",
-    label: tx("Local paths", "本地路径"),
+    label: tx("File locations", "文件位置"),
     nextAction: hasLoadErrors
       ? tx(
-          "Fix the local path config warning before relying on configured scan roots.",
-          "先修复本地路径配置警告，再依赖自定义扫描根目录。"
+          "Fix this before AIQD can use your custom folders.",
+          "先修复这个问题，AIQD 才能使用你的自定义文件夹。"
         )
       : tx(
-          "Path checks are available if a source needs a custom scan root.",
-          "如果某个来源需要自定义扫描根目录，可以在这里检查路径。"
+          "Add a custom folder here if AIQD can't find an app's files automatically.",
+          "如果 AIQD 找不到某个 App 的文件，可以在这里手动添加文件夹。"
         ),
     state: hasLoadErrors ? "warn" : "pass",
-    status: hasLoadErrors ? tx("Check config", "检查配置") : tx("Ready", "就绪"),
+    status: hasLoadErrors ? tx("Needs a look", "需要检查") : tx("Ready", "就绪"),
     target: "#paths-content"
   };
 }
 
-function renderRealDataOverviewItem(item) {
-  return `
-    <div class="setup-overview-row">
-      <div>
-        <strong>${escapeHtml(item.label)}</strong>
-        <div>${escapeHtml(item.status)}</div>
-        <div class="settings-detail">${escapeHtml(item.detail)}</div>
-        ${item.command ? renderInlineCommand(item.command) : ""}
-      </div>
-      <div class="setup-overview-actions">
-        <span class="badge ${doctorBadgeClass(item.state)}">${escapeHtml(
-          statusLabel(item.state)
-        )}</span>
-        <button
-          class="copy-button"
-          type="button"
-          data-scroll-target="${escapeHtml(item.target)}"
-        >${escapeHtml(item.actionLabel)}</button>
-      </div>
-    </div>
-  `;
-}
-
-function realDataSummaryTitle(readyCount, totalCount) {
-  if (readyCount === totalCount) {
-    return tx("Primary quota sources are ready", "主要额度来源已就绪");
-  }
-
-  if (readyCount === 0) {
-    return tx(
-      "No primary quota source is ready yet",
-      "还没有主要额度来源就绪"
-    );
-  }
-
-  return tx("One primary quota source is ready", "已有一个主要额度来源就绪");
-}
 
 function renderCodexSnapshotForm(status) {
   const draft = state.codexSnapshotFormDraft;
@@ -4241,11 +3894,11 @@ function renderCodexSnapshotForm(status) {
   return `
     <form id="codex-snapshot-form" class="settings-form">
       <div>
-        <strong>${escapeHtml(tx("Manual fallback form", "手动兜底表单"))}</strong>
+        <strong>${escapeHtml(tx("Enter your usage manually", "手动填写用量"))}</strong>
         <div class="settings-detail">${escapeHtml(
           tx(
-            "Use this only when automatic Codex CLI detection is unavailable on this machine.",
-            "只有这台机器无法自动检测 Codex CLI 额度时，才需要填写这里。"
+            "Only needed if AIQD can't detect Codex automatically on this computer.",
+            "只有这台电脑上 AIQD 没法自动检测 Codex 时才需要。"
           )
         )}</div>
       </div>
@@ -4563,87 +4216,6 @@ function setCodexSnapshotFormStatus(form, message, kind) {
   statusElement.className = `form-status ${kind}`;
 }
 
-function renderCodexSnapshotSteps(status) {
-  const autoDetected = isAutoCodexSnapshot(getCodexPrimarySnapshot());
-  const steps = [
-    {
-      badge: "1",
-      title: tx("Auto-detect CLI quota", "自动检测 CLI 额度"),
-      detail: tx(
-        "Use Codex once, then refresh. AIQD scans local Codex session rate_limits.",
-        "使用 Codex 一次后刷新。AIQD 会扫描本地 Codex session rate_limits。"
-      ),
-      command: undefined,
-      state: autoDetected ? "pass" : "info"
-    },
-    {
-      badge: "2",
-      title: tx("Manual fallback", "手动兜底"),
-      detail: autoDetected
-        ? tx(
-            "CLI data is available, so this fallback is not needed right now.",
-            "已经有 CLI 数据，现在不需要使用兜底。"
-          )
-        : status.latestHasQuota
-          ? tx(
-              "A fallback snapshot is available and clearly labeled manual.",
-              "已有兜底快照，并会明确标记为手动。"
-            )
-          : tx(
-              "If Codex exposes no usable CLI rate_limits, write only the visible quota value and reported reset time.",
-              "如果 Codex 没有暴露可用 CLI rate_limits，只写入可见额度值和报告的重置时间。"
-            ),
-      command: autoDetected ? undefined : status.writeCommand,
-      state: autoDetected || status.latestHasQuota ? "pass" : "warn"
-    },
-    {
-      badge: "3",
-      title: tx("Refresh dashboard", "刷新仪表盘"),
-      detail:
-        autoDetected
-          ? tx(
-              "The dashboard is using detected Codex CLI quota data.",
-              "仪表盘正在使用检测到的 Codex CLI 额度数据。"
-            )
-          : status.readiness === "ready"
-          ? tx(
-              "The next refresh can load the Codex fallback snapshot.",
-              "下一次刷新可以读取 Codex 兜底快照。"
-            )
-          : tx(
-              "Refresh after Codex writes CLI rate_limits or after saving the fallback.",
-              "等 Codex 写入 CLI rate_limits，或保存兜底后再刷新。"
-            ),
-      command: "node dist/index.js doctor",
-      state: autoDetected || status.readiness === "ready" ? "pass" : "info"
-    }
-  ];
-
-  return `
-    <div class="setup-flow" aria-label="${escapeHtml(
-      tx("Codex quota source setup", "Codex 额度来源设置")
-    )}">
-      ${steps
-        .map(
-          (step) => `
-            <div class="setup-step">
-              <span class="step-marker">${escapeHtml(step.badge)}</span>
-              <div>
-                <strong>${escapeHtml(step.title)}</strong>
-                <div class="settings-detail">${escapeHtml(step.detail)}</div>
-                ${step.command ? renderInlineCommand(step.command) : ""}
-              </div>
-              <span class="badge ${doctorBadgeClass(step.state)}">${escapeHtml(
-                statusLabel(step.state)
-              )}</span>
-            </div>
-          `
-        )
-        .join("")}
-    </div>
-  `;
-}
-
 function formatCodexSnapshotValue(status) {
   if (typeof status.latestRemainingPercent === "number") {
     return tx("{percent}% remaining", "剩余 {percent}%", {
@@ -4702,11 +4274,17 @@ function formatCodexSnapshotDetail(status) {
     );
   }
 
-  if (status.latestSource || status.latestConfidence) {
+  if (status.latestSource) {
     parts.push(
-      [sourceLabel(status.latestSource), confidenceLabel(status.latestConfidence)]
-        .filter(Boolean)
-        .join(" / ")
+      tx("Source {source}", "来源 {source}", { source: sourceLabel(status.latestSource) })
+    );
+  }
+
+  if (status.latestConfidence) {
+    parts.push(
+      tx("Confidence {confidence}", "可信度 {confidence}", {
+        confidence: confidenceLabel(status.latestConfidence)
+      })
     );
   }
 
@@ -4732,235 +4310,200 @@ function renderSettings() {
 
   if (!status) {
     elements.settingsContent.innerHTML = `<p class="empty">${escapeHtml(
-      tx("Setup status unavailable.", "设置状态不可用。")
+      tx("Claude status unavailable.", "Claude 状态不可用。")
     )}</p>`;
     return;
   }
 
+  const desktopAgent = findAgent("claude-desktop");
+  const desktopReady = showClaudeDesktop && isFreshRealSnapshot(desktopAgent?.primarySnapshot);
+  const cliReady = showClaudeCli && status.readiness === "ready";
+
   elements.settingsContent.innerHTML = `
-    ${showClaudeCli ? renderClaudeConnectionSummary(status) : ""}
-    ${showClaudeCli ? renderClaudeStatuslineWaitingNotice(status) : ""}
+    ${renderClaudeStatusRow({
+      status,
+      showClaudeCli,
+      showClaudeDesktop,
+      desktopReady,
+      cliReady
+    })}
 
     ${renderAdvancedDetails(
-      tx("Claude Code technical details", "Claude Code 技术细节"),
+      tx("Claude technical details", "Claude 技术细节"),
       `
-        <div class="settings-list">
-          ${settingsRow(
-            tx("Claude Code CLI", "Claude Code CLI"),
-            status.claudeCliAvailable ? tx("Found", "已找到") : tx("Not found", "未找到"),
-            status.claudeCliAvailable
-              ? status.claudeCliOnPath === false
-                ? tx("Installed at {path}, but not on PATH. AIQD will use the full path.", "已安装在 {path}，但还不在 PATH。AIQD 会使用完整路径。", {
-                    path: status.claudeCliPath ?? status.claudeCliCommand ?? "claude"
-                  })
-                : status.claudeCliPath ?? status.claudeCliCommand ?? "claude"
-              : tx("Install command: {command}", "安装命令：{command}", {
-                  command: status.claudeCliInstallCommand
-                }),
-            status.claudeCliAvailable ? "healthy" : "warning"
-          )}
-          ${settingsRow(
-            tx("Claude settings", "Claude 设置"),
-            status.settingsExists ? tx("Found", "已找到") : tx("Not found", "未找到"),
-            status.settingsPath,
-            status.settingsExists ? "healthy" : "stale"
-          )}
-          ${settingsRow(
-            tx("Statusline", "状态栏"),
-            status.statusLineConfigured
-              ? status.statusLineManagedByApp
-                ? tx("Managed by AIQD", "由 AIQD 管理")
-                : tx("Configured elsewhere", "由其他配置管理")
-              : tx("Not configured", "未配置"),
-            formatStatuslineCommandDetail(status),
-            status.statusLineManagedByApp ? "healthy" : "warning"
-          )}
-          ${settingsRow(
-            tx("Snapshot", "快照"),
-            status.latestHasRateLimits
-              ? tx("Rate limits received", "已收到 rate_limits")
-              : tx("Waiting for data", "等待数据"),
-            formatLatestSnapshotStatus(status),
-            status.latestHasRateLimits ? "healthy" : "stale"
-          )}
-          ${settingsRow(
-            tx("Readiness", "就绪状态"),
-            localizedReadinessLabel(status.readinessLabel) ?? tx("Unknown", "未知"),
-            localizedNextAction(status.nextAction) ??
-              tx("Run Doctor for setup details.", "运行诊断查看设置详情。"),
-            readinessBadgeClass(status.readiness),
-            statusLabel(status.readiness ?? "unknown")
-          )}
-          ${renderSetupChecks(status.checks)}
-        </div>
-
-        ${renderClaudeMaintenanceCommands(status)}
-
-        ${renderFieldPills(tx("Stored", "已保存"), status.savedFields, "healthy")}
-        ${renderFieldPills(tx("Not stored", "未保存"), status.notSavedFields, "stale")}
+        ${showClaudeCli ? renderClaudeCliTechnicalDetails(status) : ""}
+        ${showClaudeDesktop ? renderClaudeDesktopTechnicalDetails(desktopAgent, desktopReady) : ""}
       `
     )}
-
-    ${showClaudeDesktop ? renderClaudeDesktopSettings() : ""}
   `;
 }
 
-function renderClaudeDesktopSettings() {
-  const agent = findAgent("claude-desktop");
+// One combined status line for "Claude" as a whole - Claude Code CLI and
+// Claude Desktop are alternatives for the same account, not two things to
+// separately report on. Desktop needs no install, so it is the message we
+// lead with whenever it is being tracked and not yet ready.
+function renderClaudeStatusRow({ status, showClaudeCli, showClaudeDesktop, desktopReady, cliReady }) {
+  const ready = desktopReady || cliReady;
+
+  if (ready) {
+    return `
+      <div class="setup-watch-notice">
+        <div class="settings-detail">${escapeHtml(
+          desktopReady
+            ? tx("Via Claude Desktop", "通过 Claude Desktop")
+            : tx("Via Claude Code CLI", "通过 Claude Code CLI")
+        )}</div>
+        <span class="badge healthy">${escapeHtml(tx("Connected", "已连接"))}</span>
+      </div>
+    `;
+  }
+
+  if (showClaudeDesktop) {
+    return `
+      <div class="setup-watch-notice">
+        <div class="settings-detail">${escapeHtml(
+          tx("Open Claude Desktop once, then refresh.", "打开一次 Claude Desktop，然后刷新。")
+        )}</div>
+        <span class="badge stale">${escapeHtml(tx("Waiting", "等待中"))}</span>
+      </div>
+    `;
+  }
+
+  if (showClaudeCli) {
+    return renderClaudeCliStatusRow(status);
+  }
+
+  return "";
+}
+
+function renderClaudeCliStatusRow(status) {
+  const needsSetup = !status.statusLineManagedByApp || !status.shimExists;
+  const missingRateLimits = status.latestIssueCode === "missing_rate_limits";
+  const inputIssue =
+    status.latestIssueCode === "empty_input" || status.latestIssueCode === "invalid_json";
+
+  const detail = needsSetup
+    ? localizedNextAction(status.nextAction) ??
+      tx("Install or connect Claude Code below.", "在下面安装或接入 Claude Code。")
+    : inputIssue
+      ? tx(
+          "Open Claude Code, send one short message, and wait for the reply.",
+          "打开 Claude Code，发一条短消息，等回复完成。"
+        )
+      : missingRateLimits
+        ? tx(
+            "Claude is connected; send one short message and wait for the reply.",
+            "Claude 已连接；发一条短消息，等回复完成。"
+          )
+        : tx("Open Claude Code once, then refresh.", "打开一次 Claude Code，然后刷新。");
+
+  return `
+    <div class="setup-watch-notice">
+      <div class="settings-detail">${escapeHtml(detail)}</div>
+      <div class="connection-summary-actions">
+        <span class="badge ${needsSetup ? "warning" : "stale"}">${escapeHtml(
+          needsSetup ? tx("Needs setup", "需要设置") : tx("Waiting", "等待中")
+        )}</span>
+        ${renderClaudeConnectionAction(status)}
+      </div>
+    </div>
+  `;
+}
+
+function renderClaudeCliTechnicalDetails(status) {
+  return `
+    ${renderRealDataSteps(status)}
+    <div class="settings-list">
+      ${settingsRow(
+        tx("Claude Code CLI", "Claude Code CLI"),
+        status.claudeCliAvailable ? tx("Found", "已找到") : tx("Not found", "未找到"),
+        status.claudeCliAvailable
+          ? status.claudeCliOnPath === false
+            ? tx("Installed at {path}, but not on PATH. AIQD will use the full path.", "已安装在 {path}，但还不在 PATH。AIQD 会使用完整路径。", {
+                path: status.claudeCliPath ?? status.claudeCliCommand ?? "claude"
+              })
+            : status.claudeCliPath ?? status.claudeCliCommand ?? "claude"
+          : tx("Install command: {command}", "安装命令：{command}", {
+              command: status.claudeCliInstallCommand
+            }),
+        status.claudeCliAvailable ? "healthy" : "warning"
+      )}
+      ${settingsRow(
+        tx("Claude settings", "Claude 设置"),
+        status.settingsExists ? tx("Found", "已找到") : tx("Not found", "未找到"),
+        status.settingsPath,
+        status.settingsExists ? "healthy" : "stale"
+      )}
+      ${settingsRow(
+        tx("Statusline", "状态栏"),
+        status.statusLineConfigured
+          ? status.statusLineManagedByApp
+            ? tx("Managed by AIQD", "由 AIQD 管理")
+            : tx("Configured elsewhere", "由其他配置管理")
+          : tx("Not configured", "未配置"),
+        formatStatuslineCommandDetail(status),
+        status.statusLineManagedByApp ? "healthy" : "warning"
+      )}
+      ${settingsRow(
+        tx("Snapshot", "快照"),
+        status.latestHasRateLimits
+          ? tx("Rate limits received", "已收到 rate_limits")
+          : tx("Waiting for data", "等待数据"),
+        formatLatestSnapshotStatus(status),
+        status.latestHasRateLimits ? "healthy" : "stale"
+      )}
+      ${settingsRow(
+        tx("Readiness", "就绪状态"),
+        localizedReadinessLabel(status.readinessLabel) ?? tx("Unknown", "未知"),
+        localizedNextAction(status.nextAction) ??
+          tx("Open Diagnostics for setup details.", "运行诊断查看设置详情。"),
+        readinessBadgeClass(status.readiness),
+        statusLabel(status.readiness ?? "unknown")
+      )}
+      ${renderSetupChecks(status.checks)}
+    </div>
+
+    ${renderClaudeMaintenanceCommands(status)}
+
+    ${renderFieldPills(tx("Stored", "已保存"), status.savedFields, "healthy")}
+    ${renderFieldPills(tx("Not stored", "未保存"), status.notSavedFields, "stale")}
+  `;
+}
+
+function renderClaudeDesktopTechnicalDetails(agent, ready) {
   const checks = state.doctorChecks.filter(
     (check) => check.agent === "claude-desktop"
   );
   const pathCheck = checks.find((check) => check.id?.startsWith("claude-desktop:path:"));
   const snapshot = agent?.primarySnapshot;
-  const ready = isFreshRealSnapshot(snapshot);
-  const desktopIsPrimary = !shouldShowClaudeCliWorkflow();
 
   return `
-    <div class="setup-watch-notice">
-      <div>
-        <strong>${escapeHtml(
-          desktopIsPrimary
-            ? "Claude Desktop"
-            : tx(
-                "Claude Desktop (optional alternative)",
-                "Claude Desktop（可选替代）"
-              )
-        )}</strong>
-        <div class="settings-detail">${escapeHtml(
-          ready
-            ? tx(
-                "AIQD is reading fresh Claude Desktop usage data. Claude Code CLI is not required.",
-                "AIQD 正在读取 Claude Desktop 的最新用量数据，不需要 Claude Code CLI。"
-              )
-            : tx(
-                "AIQD checks Claude Desktop's local usage history file automatically. Open Claude Desktop once, then refresh.",
-                "AIQD 会自动检查 Claude Desktop 本地的用量历史文件。打开一次 Claude Desktop，然后刷新。"
-              )
-        )}</div>
-      </div>
-      <span class="badge ${ready ? "healthy" : "warning"}">${escapeHtml(
-        ready ? tx("Detected", "已检测") : tx("Waiting", "等待中")
-      )}</span>
-    </div>
-
-    ${renderAdvancedDetails(
-      tx("Claude Desktop technical details", "Claude Desktop 技术细节"),
-      `
-        <div class="settings-list">
-          ${settingsRow(
-            tx("Usage history file", "用量历史文件"),
-            pathCheck?.status === "pass" ? tx("Found", "已找到") : tx("Not found", "未找到"),
-            pathCheck?.detail ?? "%APPDATA%\\Claude\\plan-usage-history.json",
-            pathCheck?.status === "pass" ? "healthy" : "stale"
-          )}
-          ${settingsRow(
-            tx("Latest sample", "最新样本"),
-            snapshot ? formatRelative(snapshot.observedAt) : tx("None yet", "还没有"),
-            snapshot
-              ? tx(
-                  "{percent}% used, confidence {confidence}",
-                  "已用 {percent}%，可信度 {confidence}",
-                  {
-                    percent: Math.round(snapshot.usedPercent ?? 0),
-                    confidence: confidenceLabel(snapshot.confidence)
-                  }
-                )
-              : tx(
-                  "Open Claude Desktop so it records a new usage sample.",
-                  "打开 Claude Desktop 让它记录一次新的用量样本。"
-                ),
-            ready ? "healthy" : "stale"
-          )}
-        </div>
-      `
-    )}
-  `;
-}
-
-function renderClaudeConnectionSummary(status) {
-  const ready = status.readiness === "ready";
-  const desktopCoversClaude =
-    shouldShowClaudeDesktopWorkflow() &&
-    !ready &&
-    isFreshRealSnapshot(findAgent("claude-desktop")?.primarySnapshot);
-
-  if (desktopCoversClaude) {
-    return `
-      <div class="setup-watch-notice connection-summary">
-        <div>
-          <strong>${escapeHtml(tx("Claude is ready", "Claude 已就绪"))}</strong>
-          <div class="settings-detail">${escapeHtml(
-            tx(
-              "AIQD is reading fresh quota from Claude Desktop, so the Claude Code CLI checklist below is optional.",
-              "AIQD 正在读取 Claude Desktop 的最新额度，下面 Claude Code CLI 的检查清单是可选的。"
+    <div class="settings-list">
+      ${settingsRow(
+        tx("Claude Desktop usage history file", "Claude Desktop 用量历史文件"),
+        pathCheck?.status === "pass" ? tx("Found", "已找到") : tx("Not found", "未找到"),
+        pathCheck?.detail ?? "%APPDATA%\\Claude\\plan-usage-history.json",
+        pathCheck?.status === "pass" ? "healthy" : "stale"
+      )}
+      ${settingsRow(
+        tx("Latest sample", "最新样本"),
+        snapshot ? formatRelative(snapshot.observedAt) : tx("None yet", "还没有"),
+        snapshot
+          ? tx(
+              "{percent}% used, confidence {confidence}",
+              "已用 {percent}%，可信度 {confidence}",
+              {
+                percent: Math.round(snapshot.usedPercent ?? 0),
+                confidence: confidenceLabel(snapshot.confidence)
+              }
             )
-          )}</div>
-        </div>
-        <div class="connection-summary-actions">
-          <span class="badge healthy">${escapeHtml(tx("Ready", "已就绪"))}</span>
-        </div>
-      </div>
-      <details class="optional-settings-details">
-        <summary>
-          <span>${escapeHtml(tx("Claude Code CLI checklist", "Claude Code CLI 检查清单"))}</span>
-          <small>${escapeHtml(
-            tx(
-              "Only needed if you'd rather use the CLI instead of Claude Desktop.",
-              "只有你想改用 CLI 而不是 Claude Desktop 时才需要看。"
-            )
-          )}</small>
-        </summary>
-        <div class="optional-settings-body">
-          ${renderRealDataSteps(status)}
-        </div>
-      </details>
-    `;
-  }
-
-  const needsSetup = !status.statusLineManagedByApp || !status.shimExists;
-  const title = ready
-    ? tx("Claude is ready", "Claude 已就绪")
-    : needsSetup
-      ? tx("Claude needs setup", "Claude 需要设置")
-      : tx("Claude is waiting for quota data", "Claude 正在等待额度数据");
-  const detail = ready
-    ? tx(
-        "First-time setup is complete. The checklist below is only for troubleshooting.",
-        "首次配置已完成。下面的检查清单只用于排障。"
-      )
-    : localizedNextAction(status.nextAction) ??
-      tx(
-        "Follow the current step above. The checklist below is optional troubleshooting detail.",
-        "按上方当前步骤操作即可。下面的检查清单只是可选排障详情。"
-      );
-
-  return `
-    <div class="setup-watch-notice connection-summary">
-      <div>
-        <strong>${escapeHtml(title)}</strong>
-        <div class="settings-detail">${escapeHtml(detail)}</div>
-      </div>
-      <div class="connection-summary-actions">
-        <span class="badge ${readinessBadgeClass(status.readiness)}">${escapeHtml(
-          statusLabel(status.readiness)
-        )}</span>
-        ${renderClaudeConnectionAction(status)}
-      </div>
+          : tx(
+              "Open Claude Desktop so it records a new usage sample.",
+              "打开 Claude Desktop 让它记录一次新的用量样本。"
+            ),
+        ready ? "healthy" : "stale"
+      )}
     </div>
-    <details class="optional-settings-details">
-      <summary>
-        <span>${escapeHtml(tx("Troubleshooting checklist", "排障检查清单"))}</span>
-        <small>${escapeHtml(
-          tx(
-            "Not part of normal first-time setup unless something fails.",
-            "正常首次配置不需要操作，出问题时再看。"
-          )
-        )}</small>
-      </summary>
-      <div class="optional-settings-body">
-        ${renderRealDataSteps(status)}
-      </div>
-    </details>
   `;
 }
 
@@ -4997,16 +4540,18 @@ function renderClaudeConnectionAction(status) {
   return "";
 }
 
+function canAutoInstallClaudeCli(status) {
+  return Boolean(
+    status?.hostPlatform === "win32" && status?.claudeCliInstallMethod === "winget"
+  );
+}
+
 function claudeSetupActionForStatus(status) {
   if (!status || status.readiness === "ready") {
     return undefined;
   }
 
-  const canInstall = Boolean(
-    !status.claudeCliAvailable &&
-      status.hostPlatform === "win32" &&
-      status.claudeCliInstallCommand?.includes("Anthropic.ClaudeCode")
-  );
+  const canInstall = !status.claudeCliAvailable && canAutoInstallClaudeCli(status);
 
   if (canInstall) {
     return "install";
@@ -5017,67 +4562,6 @@ function claudeSetupActionForStatus(status) {
   }
 
   return undefined;
-}
-
-function renderClaudeStatuslineWaitingNotice(status) {
-  if (!shouldShowClaudeCliWorkflow()) {
-    return "";
-  }
-
-  if (status.readiness !== "waiting_for_data") {
-    return "";
-  }
-
-  if (isFreshRealSnapshot(findAgent("claude-desktop")?.primarySnapshot)) {
-    return "";
-  }
-
-  const missingRateLimits = status.latestIssueCode === "missing_rate_limits";
-  const inputIssue =
-    status.latestIssueCode === "empty_input" ||
-    status.latestIssueCode === "invalid_json";
-
-  return `
-    <div class="setup-watch-notice">
-      <div>
-        <strong>${escapeHtml(
-          inputIssue
-            ? tx(
-                "AIQD receiver ran without Claude session JSON",
-                "AIQD 接收器运行了，但不是 Claude session JSON"
-              )
-            : missingRateLimits
-            ? tx(
-                "Claude is connected; quota fields are not available yet",
-                "Claude 已连接；额度字段暂时不可用"
-              )
-            : tx(
-                "Waiting for Claude quota data",
-                "等待 Claude 额度数据"
-              )
-        )}</strong>
-        <div class="settings-detail">
-          ${escapeHtml(
-            inputIssue
-              ? tx(
-                  "Use the project command to open Claude Code, send one short message, wait for the reply to finish, then check again.",
-                  "请用项目命令打开 Claude Code，发一条短消息，等回复完成后再检查。"
-                )
-              : missingRateLimits
-              ? tx(
-                  "In Claude, send one short message, wait for the reply to finish, then check again.",
-                  "在 Claude 里发一条短消息，等回复完成后再检查。"
-                )
-              : tx(
-                  "If Claude is already open and shows 'waiting for rate limit data', send one short message, wait for the reply to finish, then check again.",
-                  "如果 Claude 已经打开，并显示 waiting for rate limit data，请发一条短消息，等回复完成后再检查。"
-                )
-          )}
-        </div>
-      </div>
-      <span class="badge stale">${escapeHtml(tx("watching", "监听中"))}</span>
-    </div>
-  `;
 }
 
 function formatStatuslineCommandDetail(status) {
@@ -5365,8 +4849,8 @@ function renderAgentPreferencesSettings() {
     ${renderAgentPreferenceRow({
       checked: preferences.agents.codex,
       detail: tx(
-        "Show Codex quota cards, setup checks, and diagnostics.",
-        "显示 Codex 额度卡、设置检查和诊断项。"
+        "Show Codex on the dashboard and in setup.",
+        "在仪表盘和设置页显示 Codex。"
       ),
       inputAttribute: 'data-agent-preference-agent="codex"',
       label: "Codex"
@@ -5374,8 +4858,8 @@ function renderAgentPreferencesSettings() {
     ${renderAgentPreferenceRow({
       checked: preferences.agents.claude,
       detail: tx(
-        "Show Claude quota cards, setup checks, and diagnostics.",
-        "显示 Claude 额度卡、设置检查和诊断项。"
+        "Show Claude on the dashboard and in setup.",
+        "在仪表盘和设置页显示 Claude。"
       ),
       inputAttribute: 'data-agent-preference-agent="claude"',
       label: "Claude"
@@ -5388,8 +4872,8 @@ function renderAgentPreferencesSettings() {
               <span>${escapeHtml(
                 preferences.claudeSources.desktop
                   ? tx(
-                      "Claude Desktop is the normal source when selected.",
-                      "勾选 Claude Desktop 时，常规界面优先使用它。"
+                      "Claude Desktop is used by default when checked.",
+                      "勾选后，AIQD 默认使用 Claude Desktop。"
                     )
                   : tx(
                       "Claude Code CLI is shown only when Desktop is not selected.",
@@ -5400,8 +4884,8 @@ function renderAgentPreferencesSettings() {
             ${renderAgentPreferenceRow({
               checked: preferences.claudeSources.desktop,
               detail: tx(
-                "Reads Claude Desktop's local usage history automatically.",
-                "自动读取 Claude Desktop 的本地用量历史文件。"
+                "Automatically reads your usage from Claude Desktop. No setup needed.",
+                "自动读取 Claude Desktop 里的用量记录，不用额外设置。"
               ),
               inputAttribute: 'data-agent-preference-claude-source="desktop"',
               label: "Claude Desktop"
@@ -5409,8 +4893,8 @@ function renderAgentPreferencesSettings() {
             ${renderAgentPreferenceRow({
               checked: preferences.claudeSources.cli,
               detail: tx(
-                "Uses Claude Code statusline snapshots; normal UI hides it when Desktop is selected.",
-                "使用 Claude Code 状态栏快照；选中 Desktop 时常规界面会隐藏它。"
+                "If you use Claude Code in a terminal, check this.",
+                "如果你在终端里用 Claude Code，勾选这个。"
               ),
               inputAttribute: 'data-agent-preference-claude-source="cli"',
               label: "Claude Code CLI"
@@ -5438,6 +4922,183 @@ function renderAgentPreferenceRow({ checked, detail, inputAttribute, label }) {
       </span>
     </label>
   `;
+}
+
+function loadCodexResetCreditReminderPreferences() {
+  try {
+    return normalizeCodexResetCreditReminderPreferences(
+      JSON.parse(
+        window.localStorage?.getItem(codexResetCreditReminderStorageKey) ?? "null"
+      )
+    );
+  } catch {
+    return defaultCodexResetCreditReminderPreferences();
+  }
+}
+
+function setCodexResetCreditReminderPreferences(preferences) {
+  const normalized = normalizeCodexResetCreditReminderPreferences(preferences);
+  state.codexResetCreditReminderPreferences = normalized;
+  window.localStorage?.setItem(
+    codexResetCreditReminderStorageKey,
+    JSON.stringify(normalized)
+  );
+  state.codexResetCreditReminderSaveStatus = undefined;
+  render();
+}
+
+function renderCodexResetCreditReminderSettings() {
+  if (!elements.resetCreditReminderContent) {
+    return;
+  }
+
+  const preferences = state.codexResetCreditReminderPreferences;
+  const reminder = codexResetCreditReminderState(
+    findCodexAgent()?.resetCredits,
+    preferences
+  );
+  const summary = reminder.count > 0
+    ? tx(
+        "{count} available. Next expires {time}.",
+        "可用 {count} 次。最近到期：{time}。",
+        {
+          count: reminder.count,
+          time: formatTimestamp(reminder.nextCredit?.expiresAt)
+        }
+      )
+    : tx("No available Codex reset credits found.", "当前没有可用的 Codex 重置额度。");
+  const reminderDays = normalizeCodexResetCreditReminderPreferences(preferences)
+    .daysBefore;
+  const options = [1, 3, 7, 14];
+  const customDays = reminderDays.find((days) => !options.includes(days));
+
+  elements.resetCreditReminderContent.innerHTML = `
+    <div class="preference-row">
+      <span class="preference-copy">
+        <strong>${escapeHtml(tx("Codex reset credit reminders", "Codex 重置额度提醒"))}</strong>
+        <span class="settings-detail">${escapeHtml(summary)}</span>
+      </span>
+      <label class="preference-control preference-switch-control">
+        <span class="preference-state ${preferences.enabled ? "healthy" : "stale"}">${escapeHtml(
+          preferences.enabled ? tx("On", "开启") : tx("Off", "关闭")
+        )}</span>
+        <input
+          type="checkbox"
+          data-reset-credit-reminder-toggle
+          aria-label="${escapeHtml(tx("Remind before Codex reset credits expire", "Codex 重置额度到期前提醒"))}"
+          ${preferences.enabled ? "checked" : ""}
+        />
+        <span class="toggle-switch" aria-hidden="true"></span>
+      </label>
+    </div>
+    <div class="preference-row reset-credit-days-row ${preferences.enabled ? "" : "is-disabled"}">
+      <span class="preference-copy">
+        <strong>${escapeHtml(tx("Reminder timing", "提醒时间"))}</strong>
+      </span>
+      <div class="preference-control reset-credit-day-options">
+        ${options
+          .map((days) =>
+            renderResetCreditReminderDayOption(
+              days,
+              reminderDays.includes(days),
+              preferences.enabled
+            )
+          )
+          .join("")}
+        ${renderResetCreditCustomDayOption(customDays, preferences.enabled)}
+        <button class="button reset-credit-test-notification" type="button" data-test-notification>
+          ${escapeHtml(tx("Test notification", "发送测试通知"))}
+        </button>
+      </div>
+    </div>
+    ${
+      reminder.withinReminder
+        ? renderPreferenceMessage({
+            kind: "warning",
+            message: tx(
+              "{count} Codex reset credit{plural} expire soon.",
+              "{count} 个 Codex 重置额度即将到期。",
+              {
+                count: countCreditsWithinReminder(reminder),
+                plural: countCreditsWithinReminder(reminder) === 1 ? "" : "s"
+              }
+            )
+          })
+        : ""
+    }
+  `;
+}
+
+document.addEventListener("click", (event) => {
+  const target = event.target;
+  if (!(target instanceof Element) || !target.closest("[data-test-notification]")) {
+    return;
+  }
+  void window.aiqdDesktop?.showNotification(
+    tx("Codex reset credit reminder", "Codex 重置额度提醒"),
+    tx(
+      "Your Codex reset credit expires in 3 days. Open AIQD to review it.",
+      "你的 Codex 重置额度将在 3 天后到期，请打开 AIQD 查看详情。"
+    )
+  );
+});
+
+function renderResetCreditCustomDayOption(days, enabled) {
+  return `
+    <label class="reset-credit-custom-option ${days ? "is-selected" : ""} ${
+      enabled ? "" : "is-disabled"
+    }">
+      <span>${escapeHtml(tx("Custom", "自定义"))}</span>
+      <input
+        type="number"
+        min="1"
+        max="30"
+        step="1"
+        value="${days ?? 15}"
+        data-reset-credit-custom-days
+        aria-label="${escapeHtml(tx("Custom reminder days", "自定义提醒天数"))}"
+        ${enabled ? "" : "disabled"}
+      />
+      <span>${escapeHtml(tx("days", "天"))}</span>
+    </label>
+  `;
+}
+
+function renderResetCreditReminderDayOption(days, checked, enabled) {
+  const label =
+    days === 1
+      ? tx("1 day", "1 天")
+      : tx("{days} days", "{days} 天", { days });
+
+  return `
+    <label class="reset-credit-day-option ${checked ? "is-selected" : ""} ${
+      enabled ? "" : "is-disabled"
+    }">
+      <input
+        type="checkbox"
+        data-reset-credit-reminder-days
+        value="${days}"
+        ${checked ? "checked" : ""}
+        ${enabled ? "" : "disabled"}
+      />
+      <span>${escapeHtml(label)}</span>
+    </label>
+  `;
+}
+
+function findCodexAgent() {
+  return state.agents.find(
+    (agent) => agent.provider === "openai" && agent.agent === "codex"
+  );
+}
+
+function countCreditsWithinReminder(reminder) {
+  const maxDays = Math.max(...reminder.preferences.daysBefore);
+  const deadline = Date.now() + maxDays * 86_400_000;
+
+  return reminder.credits.filter(
+    (credit) => Date.parse(credit.expiresAt) <= deadline
+  ).length;
 }
 
 function renderStartupControls() {
@@ -5932,7 +5593,11 @@ function renderPathSettings() {
       (agent.configuredDataPaths ?? []).map((path) =>
         settingsRow(
           agent.displayName,
-          path.readable ? "Readable" : path.exists ? "Not readable" : "Not found",
+          path.readable
+            ? tx("Readable", "可读取")
+            : path.exists
+              ? tx("Not readable", "不可读取")
+              : tx("Not found", "未找到"),
           path.path,
           path.readable ? "healthy" : "warning"
         )
@@ -5951,7 +5616,6 @@ function renderPathSettings() {
       ${errorRows}
       ${agentRows}
     </div>
-    ${renderCommandBlock("List command", status.listCommand)}
     ${
       configuredPathRows
         ? `<div class="settings-list">${configuredPathRows}</div>`
@@ -5979,10 +5643,7 @@ function renderDesktopShortcutsSettings() {
       settingsRow(
         shortcut.description,
         shortcut.enabled ? formatShortcutValue(shortcut.value) : tx("Disabled", "已关闭"),
-        tx("{envVar} - default {value}", "{envVar} - 默认 {value}", {
-          envVar: shortcut.envVar,
-          value: shortcut.defaultValue
-        }),
+        "",
         shortcut.enabled ? "healthy" : "stale",
         shortcut.enabled ? tx("enabled", "已启用") : tx("off", "关闭")
       )
@@ -5999,16 +5660,6 @@ function renderDesktopShortcutsSettings() {
     </div>
     <div class="settings-list">
       ${shortcutRows}
-      ${settingsRow(
-        tx("Disable a shortcut", "关闭某个快捷键"),
-        status.disableValue ?? "off",
-        tx(
-          "Set any desktop shortcut environment variable to this value before launching the desktop app.",
-          "启动桌面应用前，把任意桌面快捷键环境变量设置成这个值即可关闭。"
-        ),
-        "stale",
-        tx("optional", "可选")
-      )}
     </div>
   `;
 }
@@ -6048,13 +5699,7 @@ function renderPathAgentRow(agent) {
   return `
     <div class="settings-row">
       <strong>${escapeHtml(agent.displayName)}</strong>
-      <div>
-        <div>${escapeHtml(value)}</div>
-        <div class="inline-command-list">
-          ${renderInlineCommand(agent.addCommand)}
-          ${renderInlineCommand(agent.removeCommand)}
-        </div>
-      </div>
+      <div>${escapeHtml(value)}</div>
       <span class="badge ${configuredCount === 0 ? "stale" : "healthy"}">${escapeHtml(
         value
       )}</span>
@@ -6219,6 +5864,17 @@ function settingsRow(label, value, detail, badgeClass, badgeLabel = value) {
   `;
 }
 
+// Reset events store the raw per-source agent id (e.g. "claude-code"),
+// but the dashboard only ever shows one merged "Claude" card - so this
+// list needs the same id -> unified display name mapping the cards use.
+function eventAgentDisplayName(agentId) {
+  if (agentId === claudeCodeAgentId || agentId === claudeDesktopAgentId) {
+    return "Claude";
+  }
+
+  return state.agents.find((agent) => agent.agent === agentId)?.displayName ?? agentId;
+}
+
 function eventTitle(event) {
   if (event.eventType === "reset_anchor_changed") {
     return tx("{window} reset time changed", "{window}重置时间变化", {
@@ -6290,19 +5946,7 @@ function formatRemaining(snapshot) {
 }
 
 function formatUsed(snapshot) {
-  if (!snapshot) {
-    return "";
-  }
-
-  if (typeof snapshot.usedPercent === "number") {
-    return `${Math.round(snapshot.usedPercent)}%`;
-  }
-
-  if (typeof snapshot.used === "number") {
-    return `${compactNumber(snapshot.used)} ${snapshot.unit ?? ""}`.trim();
-  }
-
-  return "";
+  return sharedFormatUsed(snapshot, compactNumber);
 }
 
 function formatTimestamp(value) {
@@ -6362,11 +6006,11 @@ function toTimeLocalValue(value) {
 
 function windowLabel(windowType) {
   const labels = {
-    session_5h: tx("5h window", "5 小时窗口"),
+    session_5h: tx("5 hours", "5 小时"),
     daily: tx("Daily", "每日"),
-    weekly: tx("Weekly", "每周"),
+    weekly: tx("1 week", "1 周"),
     monthly: tx("Monthly", "每月"),
-    billing_cycle: tx("Billing cycle", "计费周期"),
+    billing_cycle: tx("Billing", "计费"),
     credits: tx("Credits", "点数")
   };
 
@@ -6424,8 +6068,8 @@ function localizedReadinessLabel(label) {
     ["No Codex snapshot yet", "还没有 Codex 兜底"],
     ["No Codex fallback yet", "还没有 Codex 兜底"],
     ["Manual Codex fallback ready", "Codex 手动兜底已就绪"],
-    ["Waiting for Claude Code data", "等待 Claude 数据"],
-    ["Waiting for Claude Code CLI command", "等待 Claude 命令"],
+    ["Waiting for Claude Code data", "等待 Claude Code 数据"],
+    ["Waiting for Claude Code CLI command", "等待 Claude Code 命令"],
     ["Claude Code setup needed", "需要设置 Claude Code"],
     ["Codex manual snapshot ready", "Codex 手动兜底已就绪"],
     ["Claude Code data ready", "Claude Code 数据已就绪"]
@@ -6484,46 +6128,51 @@ function localizedNextAction(action) {
 }
 
 function agentEmptyText(agent) {
-  if (currentLanguage !== "zh") {
-    return {
-      detail:
-        agent.emptyState?.detail ??
-        "The latest refresh did not produce a quota snapshot for this agent.",
-      title: agent.emptyState?.title ?? "No quota data yet"
-    };
-  }
-
   if (agent.emptyState?.reason === "waiting_for_statusline_data") {
     return {
-      detail: "按设置页当前步骤，从终端启动 Claude Code 一次。",
-      title: "等待 Claude 数据"
+      detail: tx(
+        "Open Claude Code from a terminal once, following the current step in Settings.",
+        "按设置页当前步骤，从终端启动 Claude Code 一次。"
+      ),
+      title: tx("Waiting for Claude Code data", "等待 Claude Code 数据")
     };
   }
 
   if (agent.emptyState?.reason === "waiting_for_desktop_data") {
     return {
-      detail: "打开 Claude Desktop，让它记录一次新的用量样本，然后刷新 AIQD。",
-      title: "等待 Claude Desktop 数据"
+      detail: tx(
+        "Open Claude Desktop so it records a new usage sample, then refresh AIQD.",
+        "打开 Claude Desktop，让它记录一次新的用量样本，然后刷新 AIQD。"
+      ),
+      title: tx("Waiting for Claude Desktop data", "等待 Claude Desktop 数据")
     };
   }
 
   if (agent.emptyState?.reason === "adapter_error") {
     return {
-      detail: "打开诊断页查看失败的适配器。",
-      title: "扫描失败"
+      detail: tx("Open Diagnostics to see what went wrong.", "打开诊断页查看出了什么问题。"),
+      title: tx("Something went wrong", "出了点问题")
     };
   }
 
   if (agent.agent === "codex") {
     return {
-      detail: "AIQD 会先读取本地 Codex CLI session rate_limits。使用 Codex 一次后刷新；如果仍没有数据，再用设置页的手动兜底。",
-      title: "等待 Codex CLI 额度数据"
+      detail: tx(
+        "AIQD checks for Codex usage automatically first. Use Codex once, then refresh; if nothing appears, use the manual form in Settings.",
+        "AIQD 会先自动检查 Codex 用量。使用 Codex 一次后刷新；如果还是没有数据，就用设置页里的手动表单。"
+      ),
+      title: tx("Waiting for Codex data", "等待 Codex 数据")
     };
   }
 
   return {
-    detail: "最近一次刷新没有为这个 Agent 生成额度快照。",
-    title: "还没有额度数据"
+    detail:
+      agent.emptyState?.detail ??
+      tx(
+        "The latest refresh did not find any quota data for this app.",
+        "最近一次刷新没有找到这个 App 的额度数据。"
+      ),
+    title: agent.emptyState?.title ?? tx("No quota data yet", "还没有额度数据")
   };
 }
 

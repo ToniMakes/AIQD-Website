@@ -35,8 +35,8 @@ describe("runClaudeAutoSetup", () => {
         setupArgv.push(argv);
         return {
           command: "powershell -File claude-statusline.ps1",
-          settingsPath: "C:\\Users\\hitomi\\.claude\\settings.json",
-          shimPath: "C:\\Users\\hitomi\\.aiqd\\claude-statusline.ps1"
+          settingsPath: "C:\\Users\\testuser\\.claude\\settings.json",
+          shimPath: "C:\\Users\\testuser\\.aiqd\\claude-statusline.ps1"
         };
       },
       statusLookup: async () => statuses.shift() ?? statuses.at(-1)!
@@ -80,8 +80,8 @@ describe("runClaudeAutoSetup", () => {
         setupArgv.push(argv);
         return {
           command: "powershell -File claude-statusline.ps1",
-          settingsPath: "C:\\Users\\hitomi\\.claude\\settings.json",
-          shimPath: "C:\\Users\\hitomi\\.aiqd\\claude-statusline.ps1"
+          settingsPath: "C:\\Users\\testuser\\.claude\\settings.json",
+          shimPath: "C:\\Users\\testuser\\.aiqd\\claude-statusline.ps1"
         };
       },
       statusLookup: async () => statuses.shift() ?? statuses.at(-1)!
@@ -134,8 +134,8 @@ describe("runClaudeAutoSetup", () => {
         setupArgv.push(argv);
         return {
           command: "powershell -File claude-statusline.ps1",
-          settingsPath: "C:\\Users\\hitomi\\.claude\\settings.json",
-          shimPath: "C:\\Users\\hitomi\\.aiqd\\claude-statusline.ps1"
+          settingsPath: "C:\\Users\\testuser\\.claude\\settings.json",
+          shimPath: "C:\\Users\\testuser\\.aiqd\\claude-statusline.ps1"
         };
       },
       statusLookup: async () =>
@@ -177,6 +177,7 @@ function status(
       "Set-Location -LiteralPath 'C:\\repo'\nclaude",
     claudeCliExampleProjectPath: "C:\\repo",
     claudeCliInstallCommand: "winget install Anthropic.ClaudeCode",
+    claudeCliInstallMethod: "winget",
     claudeCliOpenCommand: "Set-Location -LiteralPath 'C:\\path'\nclaude",
     forceWriteCommand: "node dist/index.js setup claude-statusline --write --force",
     historyExists: false,
@@ -193,7 +194,7 @@ function status(
     savedFields: [],
     selfTestCommand: "node dist/index.js claude-statusline-sink --self-test",
     settingsExists: true,
-    settingsPath: "C:\\Users\\hitomi\\.claude\\settings.json",
+    settingsPath: "C:\\Users\\testuser\\.claude\\settings.json",
     shimExists: true,
     shimPath: "C:\\aiqd\\claude-statusline.ps1",
     statusLineConfigured: true,

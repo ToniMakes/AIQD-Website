@@ -1,7 +1,9 @@
 # AI Agent Quota Dashboard 产品与技术 Brief
 
+> **历史文档，内容已过时。** 这是 v0.1 早期的规划/spec 文档，本文档更新之后产品有过多次调整（例如下面提到的截图、mini 卡片来源标签设计）。当前项目状态以 [docs/status.md](status.md) 为准，本文档仅作早期决策背景参考，不代表现状。
+
 更新时间：2026-08-13
-当前阶段：v0.1 developer preview / 真实数据 dogfooding。核心 MVP 已经从构思进入可运行实现：本地 Web Dashboard、Doctor、Settings、Codex/Claude Code/Claude Desktop 真实额度来源、桌面托盘小面板、桌面置顶小组件、严格 readiness 检查和默认英文的中英双语 UI 都已落地。Claude Desktop 本地 `plan-usage-history.json` 用量来源已经接入并作为 Claude Code CLI 的替代来源（二选一即可，不再要求都配置），让只用 Claude 桌面版的普通用户也能被覆盖；发布前剩下的优先级是 fresh-machine 试跑、截图和 GitHub Release。
+当前阶段：v0.1 developer preview / 真实数据 dogfooding。核心 MVP 已经从构思进入可运行实现：本地 Web Dashboard、Doctor、Settings、Codex/Claude Code/Claude Desktop 真实额度来源、桌面托盘小面板、桌面置顶小组件、严格 readiness 检查和默认英文的中英双语 UI 都已落地。Claude Desktop 本地 `plan-usage-history.json` 用量来源已经接入并作为 Claude Code CLI 的替代来源（二选一即可，不再要求都配置），让只用 Claude 桌面版的普通用户也能被覆盖。（本段是 2026-08-13 时的规划快照；v0.1.0 已于 2026-08-25 发布，截图和 GitHub Release 均已完成，当前状态见 docs/status.md。）
 
 当前状态总览见：[docs/status.md](status.md)。
 
@@ -20,11 +22,10 @@
 - `trial:preflight` / `trial:ready` 严格真实数据检查
 - Windows + Ubuntu GitHub Actions CI
 
-仍需在公开宣传前完成：
+（以下是 2026-08-13 时"公开宣传前仍需完成"的清单，截图/GIF、README 发布说明均已在 v0.1.0 发布时完成；当前仍未完成的只有真正的 clean 机器/VM 试跑，见 docs/roadmap.md）
 
 - 新手初次配置文案继续压缩和跨系统适配
 - 完整 fresh-machine 真实数据试跑
-- 截图/GIF 和 README 发布说明
 - 首版分发方式已调整为 installer-first desktop preview；普通用户应通过安装包和桌面入口使用，源码运行只作为开发者兜底
 
 ## 1. 一句话定位
@@ -138,6 +139,8 @@ v0.5: 浏览器插件读取网页可见 quota，但只做 opt-in
 
 ### 4.1 打包与开机启动决策
 
+（本节描述的行为已经实现并发布，不再是待定决策；当前权威说明见 [docs/distribution.md](distribution.md)，这里只保留原始设计动机供参考）
+
 v0.1 目标改为提供安装包或等价桌面发布 artifact。普通用户路径不应要求 `npm`、`node`、PowerShell 或源码 checkout；这些只保留在开发者文档里。
 
 packaged desktop 的开机启动已经放在两个位置：
@@ -175,7 +178,7 @@ Claude Code  41% left    weekly resets in 4d local_log
 Gemini CLI   no data     not used today      unavailable
 ```
 
-每个 agent 一张小卡：
+每个 agent 一张小卡（早期设计；实际 mini 面板在 rc.3 之后根据测试反馈把"数据来源标签"换成了"报告的重置时间"，紧凑界面不再直接暴露 source 标签，详见 docs/status.md）：
 
 - agent 图标
 - 剩余额度百分比 / 数值
@@ -855,13 +858,10 @@ GitHub: https://github.com/ofershap/cursor-usage-tracker
 - Always-on-top widget
 - 默认英文的中英双语 UI
 
-发布前继续打磨：
+发布前继续打磨（截图/GIF、README release 说明、打包/分发方式、release checklist 均已在 v0.1.0 发布时完成）：
 
 - 新手 onboarding 文案和跨系统终端指引
 - fresh-machine 真实数据试跑
-- 截图/GIF 和 README release 说明
-- 打包/分发方式
-- release checklist
 
 v0.2 再考虑：
 
@@ -956,7 +956,7 @@ It does not collect prompts, responses, source code, passwords, or session cooki
 中文：
 
 ```text
-本工具只读取你本机上已存在的使用统计、额度快照或官方状态输出。
+本工具只读取你本机上已存在的额度快照或官方状态输出。
 不会收集 prompt、回复内容、源代码、密码或浏览器 session。
 ```
 
@@ -969,13 +969,9 @@ It does not collect prompts, responses, source code, passwords, or session cooki
 - 每个网络请求都 opt-in
 - 导出 quota 数据时提醒是否包含账户信息
 
-不要做：
+不要做（完整清单见 [README Non-goals](../README.md#non-goals)，避免两处各写一遍）：
 
-- 自动读取浏览器 cookie
-- 自动模拟网页登录
-- 未经同意扫描任意目录
-- 把 prompt/response 上传到云
-- 夸大“官方准确”
+- 夸大"官方准确"
 
 ## 16. 建议的首页信息架构
 
@@ -1042,6 +1038,8 @@ Troubleshooting actions
 ```
 
 ## 17. 推荐下一步
+
+（本节列的 1-8 步已经全部完成并随 v0.1.0 于 2026-08-25 发布，保留仅供参考当时的执行顺序；当前待办见 docs/roadmap.md）
 
 当前最值得做的不是继续加 provider，而是把已经能跑通的真实数据体验打磨到可以给早期用户试用：
 

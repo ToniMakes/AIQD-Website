@@ -147,6 +147,50 @@ describe("AgentQuotaService supported windows", () => {
   });
 });
 
+describe("AgentQuotaService Codex reset credits", () => {
+  it("attaches current Codex reset credits to the Codex agent summary", async () => {
+    await withStore(async (store) => {
+      store.replaceCodexResetCredits([
+        {
+          provider: "openai",
+          agent: "codex",
+          resetType: "codexRateLimits",
+          title: "Full reset",
+          status: "available",
+          expiresAt: "2999-01-01T00:00:00.000Z",
+          observedAt: "2026-08-21T00:23:00.000Z",
+          source: "official_cli",
+          confidence: "official"
+        }
+      ]);
+
+      const service = new AgentQuotaService(
+        createRegistry(codexManifest),
+        store
+      );
+      const agents = service.listAgents();
+
+      assert.equal(agents[0]?.resetCredits?.length, 1);
+      assert.equal(agents[0]?.resetCredits?.[0]?.title, "Full reset");
+    });
+  });
+});
+
+describe("AgentQuotaService subscription tiers", () => {
+  it("attaches adapter-reported subscription tiers to agent summaries", async () => {
+    await withStore(async (store) => {
+      const service = new AgentQuotaService(
+        createRegistry(codexManifest, "Pro Lite"),
+        store
+      );
+      await service.refresh();
+      const agents = service.listAgents();
+
+      assert.equal(agents[0]?.subscriptionTier, "Pro Lite");
+    });
+  });
+});
+
 async function withStore(
   callback: (store: SqliteStore) => Promise<void>
 ): Promise<void> {
@@ -162,13 +206,15 @@ async function withStore(
 }
 
 function createRegistry(
-  adapterManifest: AgentManifest = manifest
+  adapterManifest: AgentManifest = manifest,
+  subscriptionTier?: string
 ): AdapterRegistry {
   const adapter: AgentAdapter = {
     manifest: adapterManifest,
     async scan() {
       return {
         snapshots: [],
+        ...(subscriptionTier ? { subscriptionTier } : {}),
         usageEvents: [],
         doctorChecks: []
       };

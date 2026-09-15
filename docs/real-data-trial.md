@@ -85,7 +85,7 @@ Expected:
 
 - Settings shows `Launch at startup` as on.
 - The Windows startup command launches the packaged AIQD executable with `--background`.
-- If setup is still missing, first-run guidance may open Settings or Doctor. After setup is complete and the guide has already been shown, sign-in should start only the tray shell and local backend.
+- If setup is still missing, first-run guidance may open Settings or Diagnostics. After setup is complete and the guide has already been shown, sign-in should start only the tray shell and local backend.
 
 Optional PowerShell confirmation:
 
@@ -116,7 +116,7 @@ Normal-user installer trial:
 3. Confirm the main dashboard window opens.
 4. Open Settings if the first-run guide does not take you there automatically.
 
-The normal-user first run should not require `npm`, `node`, or source checkout commands. PowerShell checks in this document are maintainer verification aids only.
+PowerShell checks in this document are maintainer verification aids only, not something a normal user should ever need to run.
 
 Developer source-mode trial:
 
@@ -154,10 +154,10 @@ Expected first launch behavior:
 
 - If Codex has no usable local CLI quota data, the app opens Settings at `Codex Quota Source`.
 - If Claude Code setup or data is missing, the app opens Settings at `Claude Code Statusline`.
-- If an adapter has a blocking error, the app opens Doctor.
+- If an adapter has a blocking error, the app opens Diagnostics.
 - If primary sources are ready, the app opens the mini panel.
 
-The guide is one-time per desktop user data directory. After that, use the tray menu or mini panel actions to open Settings, Doctor, Dashboard, or the always-on-top widget.
+The guide is one-time per desktop user data directory. After that, use the tray menu or mini panel actions to open Settings, Diagnostics, Dashboard, or the always-on-top widget.
 
 If the desktop app does not open, run:
 
@@ -185,16 +185,7 @@ If not ready: automatic detection may be unavailable on this machine or Codex ve
 - `Reported reset`
 - Optional label
 
-Then click `Save snapshot`.
-
-CLI equivalent:
-
-```bash
-npm run build
-node dist/index.js codex snapshot --remaining-percent 72 --reset-at 2026-08-16T03:00:00Z
-```
-
-Manual Codex fallback snapshots expire at their reported reset time. If Codex later changes the reset anchor, refresh first; if no CLI data appears, record a new visible fallback value.
+Then click `Save snapshot`, or use the CLI equivalent — see [Codex Quota Detection](../README.md#codex-quota-detection) for the command and how manual fallback snapshots expire.
 
 ## 5. Verify Claude Desktop Coverage
 
@@ -213,7 +204,7 @@ Normal-user path from the desktop app:
 3. If the file exists and has a recent sample, it shows as `Done` immediately — nothing to install or connect.
 4. If it shows `Waiting`, open Claude Desktop so it records a new usage sample, then click `Refresh Claude Desktop`.
 
-Expected: AIQD shows Claude Desktop five-hour and weekly usage from local plan usage samples, labels the source clearly (`Local snapshot`), and does not read chat content, cookies, hidden API responses, prompts, responses, or attachments. Claude readiness in Doctor and the real-data overview shows ready as soon as this source is fresh, even if Claude Code CLI is never set up.
+Expected: AIQD shows Claude Desktop five-hour and weekly usage from local plan usage samples and labels the source clearly (`Local snapshot`); see [Privacy](privacy.md) for the data boundary this respects. Claude readiness in Diagnostics and the real-data overview shows ready as soon as this source is fresh, even if Claude Code CLI is never set up.
 
 ## 6. Connect Claude Code
 
@@ -230,9 +221,7 @@ Normal-user path from the desktop app:
 
 Expected: Claude Code is marked ready after AIQD receives supported `rate_limits` fields. If Claude opens but AIQD still says it is waiting, send one short message in Claude and wait for the response to finish.
 
-Developer source-mode fallback:
-
-Run the sink self-test first. It uses fake `rate_limits` data and temporary files.
+Developer source-mode fallback — see [Claude Code Statusline](../README.md#claude-code-statusline) for the full build/preview/install walkthrough and `PATH` troubleshooting. For this trial, run the self-test first:
 
 ```bash
 npm run claude:self-test
@@ -240,26 +229,11 @@ npm run claude:self-test
 
 Expected: the self-test reports parsed rate-limit windows and does not write to the normal Claude statusline snapshot path.
 
-Preview the managed statusline command:
-
-```bash
-npm run build
-node dist/index.js setup claude-statusline
-```
-
-Expected: the preview shows the command AIQD would install, without changing Claude settings.
-
-Install only after reviewing the preview:
-
-```bash
-node dist/index.js setup claude-statusline --write
-```
-
-Then open Claude Code once in any project so its statusline renders. AIQD will refresh when supported `rate_limits` fields arrive.
+Then install (`node dist/index.js setup claude-statusline --write`) and open Claude Code once in any project so its statusline renders. AIQD will refresh when supported `rate_limits` fields arrive.
 
 Platform notes:
 
-- Windows: the Settings flow can install Claude Code CLI with the explicit install button when the supported Windows package is available. If Doctor says `claude.exe` is outside `PATH`, use the full-path command shown by Settings or Doctor, or restart AIQD after opening Claude Code from your normal terminal.
+- Windows: the Settings flow can install Claude Code CLI with the explicit install button when the supported Windows package is available.
 - macOS/Linux: open a terminal in a project and run `claude`; if the command is not found, install or expose the Claude Code CLI first.
 
 If not ready: run `npm run trial:preflight`. A common next action is `Open Claude Code to refresh the statusline snapshot`, which means Claude is configured but has not sent a fresh supported `rate_limits` payload yet.
@@ -283,7 +257,7 @@ In the desktop app, check:
 - Dashboard shows Codex, Claude Code, and/or Claude Desktop quota rows.
 - Mini panel shows the most constrained remaining quota and reported reset.
 - Mini panel and always-on-top widget can switch between Chinese and English with the shared language preference.
-- Doctor first-run checklist shows quota sources ready or gives a specific next action.
+- Diagnostics first-run checklist shows quota sources ready or gives a specific next action.
 - Refresh History has a recent run with snapshot and check counts.
 
 `npm run trial:preflight` gives the shortest next action for Codex, Claude Code, and blocking Doctor issues. `npm run trial:ready` uses strict Doctor mode. It fails until every configured agent has a fresh non-demo quota snapshot, which is useful right before deciding whether the app is ready for a real-data experience.
@@ -293,5 +267,5 @@ The Settings > Real Data Setup summary, desktop first-run guide, tray status, an
 ## Notes
 
 - Reported reset times are observations from the current source, not guaranteed future reset predictions.
-- AIQD does not approve prompts, automate other apps, read cookies, or parse arbitrary transcripts.
 - If a source cannot be obtained legally and reliably, AIQD should show `unavailable` instead of guessing.
+- See [Privacy](privacy.md) for the full data boundary.

@@ -26,7 +26,7 @@ const snapshot: QuotaSnapshot = {
   source: "official_cli",
   confidence: "official",
   stale: false,
-  rawSourceRef: "C:\\Users\\hitomi\\.codex\\quota.json"
+  rawSourceRef: "C:\\Users\\testuser\\.codex\\quota.json"
 };
 
 const resetEvent: ResetEvent = {
@@ -109,14 +109,30 @@ describe("quota export", () => {
       agent: "codex",
       displayName: "Codex",
       shortName: "Codex",
+      subscriptionTier: "Pro Lite",
       status: "healthy",
       doctorStatus: "pass",
+      resetCredits: [
+        {
+          provider: "openai",
+          agent: "codex",
+          resetType: "codexRateLimits",
+          title: "Full reset",
+          status: "available",
+          expiresAt: "2026-09-21T00:17:45.000Z",
+          observedAt: "2026-09-12T00:00:00.000Z",
+          source: "official_cli",
+          confidence: "official"
+        }
+      ],
       snapshots: [withSnapshotFreshness(snapshot)]
     };
     const sanitized = sanitizeAgentSummary(agent);
     const serialized = JSON.stringify(sanitized);
 
     assert.equal(sanitized.snapshots[0]?.freshness.reason, "fresh");
+    assert.equal(sanitized.subscriptionTier, "Pro Lite");
+    assert.equal(sanitized.resetCredits?.[0]?.expiresAt, "2026-09-21T00:17:45.000Z");
     assert.equal(Object.hasOwn(sanitized.snapshots[0] ?? {}, "rawSourceRef"), false);
     assert.equal(Object.hasOwn(sanitized.snapshots[0] ?? {}, "accountIdHash"), false);
     assert.equal(serialized.includes("C:\\Users"), false);

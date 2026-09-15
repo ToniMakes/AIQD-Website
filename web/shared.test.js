@@ -1,18 +1,31 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
+  agentSubscriptionTier,
+  availableCodexResetCredits,
+  buildDisplayAgents,
+  codexResetCreditReminderState,
   clamp,
   createI18n,
   defaultLanguage,
+  defaultOnboardingPreferences,
   escapeHtml,
+  filterAgentsByOnboarding,
   hasUsableResetAt,
   mergeClaudeSnapshots,
   mergeSnapshotResetTiming,
   isSameSnapshot,
   isStaleSnapshot,
   languageStorageKey,
+  normalizeCodexResetCreditReminderPreferences,
+  normalizeClaudeSources,
+  normalizeOnboardingPreferences,
+  pickPrimaryClaudeAgent,
+  preferredClaudeDashboardSource,
   primaryMeterClass,
-  resolveInitialLanguage
+  readinessDisplayName,
+  resolveInitialLanguage,
+  staleReasonLabel
 } from "./shared.js";
 
 function withStubbedWindow(storedLanguage, run) {
@@ -282,5 +295,257 @@ describe("primaryMeterClass", () => {
       primaryMeterClass({ windowType: "weekly" }, "warning"),
       "warning"
     );
+  });
+});
+
+describe("normalizeClaudeSources", () => {
+  it("defaults to desktop-only when nothing is set", () => {
+    assert.deepEqual(
+      normalizeClaudeSources({}, defaultOnboardingPreferences().claudeSources),
+      { cli: false, desktop: true }
+    );
+  });
+
+  it("falls back to desktop if both sources would otherwise be off", () => {
+    assert.deepEqual(
+      normalizeClaudeSources(
+        { claudeSources: { cli: false, desktop: false } },
+        defaultOnboardingPreferences().claudeSources
+      ),
+      { cli: false, desktop: true }
+    );
+  });
+
+  it("honors an explicit cli-only selection", () => {
+    assert.deepEqual(
+      normalizeClaudeSources(
+        { claudeSources: { cli: true, desktop: false } },
+        defaultOnboardingPreferences().claudeSources
+      ),
+      { cli: true, desktop: false }
+    );
+  });
+});
+
+describe("normalizeOnboardingPreferences", () => {
+  it("returns defaults for missing input", () => {
+    assert.deepEqual(normalizeOnboardingPreferences(undefined), {
+      agents: { claude: true, codex: true },
+      claudeSources: { cli: false, desktop: true },
+      claudeSource: "desktop",
+      completed: false
+    });
+  });
+});
+
+describe("preferredClaudeDashboardSource / pickPrimaryClaudeAgent", () => {
+  const freshCliAgent = {
+    agent: "claude-code",
+    primarySnapshot: { source: "official_statusline", observedAt: "2026-08-20T00:00:00.000Z" }
+  };
+  const freshDesktopAgent = {
+    agent: "claude-desktop",
+    primarySnapshot: { source: "local_quota_snapshot", observedAt: "2026-08-19T00:00:00.000Z" }
+  };
+
+  it("has no preference before onboarding is completed", () => {
+    assert.equal(preferredClaudeDashboardSource({ completed: false }), undefined);
+  });
+
+  it("prefers whichever source the user explicitly selected, even if it is older", () => {
+    const olderCliAgent = {
+      agent: "claude-code",
+      primarySnapshot: { source: "official_statusline", observedAt: "2026-08-01T00:00:00.000Z" }
+    };
+    const cliPreference = normalizeOnboardingPreferences({
+      completed: true,
+      claudeSources: { cli: true, desktop: false }
+    });
+
+    assert.equal(preferredClaudeDashboardSource(cliPreference), "cli");
+    assert.equal(
+      pickPrimaryClaudeAgent(olderCliAgent, freshDesktopAgent, "cli"),
+      olderCliAgent
+    );
+  });
+
+  it("falls back to freshness comparison when there is no explicit preference", () => {
+    assert.equal(
+      pickPrimaryClaudeAgent(freshCliAgent, freshDesktopAgent, undefined),
+      freshCliAgent
+    );
+  });
+});
+
+describe("filterAgentsByOnboarding / buildDisplayAgents", () => {
+  const agents = [
+    { agent: "codex", provider: "openai" },
+    {
+      agent: "claude-code",
+      provider: "anthropic",
+      subscriptionTier: "Pro",
+      snapshots: [],
+      primarySnapshot: { source: "official_statusline", observedAt: "2026-08-20T00:00:00.000Z" }
+    },
+    {
+      agent: "claude-desktop",
+      provider: "anthropic",
+      snapshots: [],
+      primarySnapshot: { source: "local_quota_snapshot", observedAt: "2026-08-19T00:00:00.000Z" }
+    }
+  ];
+
+  it("hides the CLI workflow when onboarding selected desktop-only", () => {
+    const preferences = normalizeOnboardingPreferences({
+      completed: true,
+      claudeSources: { cli: false, desktop: true }
+    });
+    const visible = filterAgentsByOnboarding(agents, preferences).map((agent) => agent.agent);
+
+    assert.deepEqual(visible, ["codex", "claude-desktop"]);
+  });
+
+  it("merges Claude Code and Claude Desktop into one card honoring the selected source", () => {
+    const preferences = normalizeOnboardingPreferences({
+      completed: true,
+      claudeSources: { cli: true, desktop: false }
+    });
+    const merged = buildDisplayAgents(
+      agents,
+      preferredClaudeDashboardSource(preferences)
+    ).find((agent) => agent.agent === "claude");
+
+    assert.equal(merged.primarySnapshot.source, "official_statusline");
+    assert.equal(merged.subscriptionTier, "Pro");
+  });
+});
+
+describe("staleReasonLabel", () => {
+  const tx = createI18n(() => "en").tx;
+  const txZh = createI18n(() => "zh").tx;
+
+  it("resolves the same English source string to the same Chinese wording regardless of caller", () => {
+    const snapshot = { stale: true };
+
+    assert.equal(staleReasonLabel(snapshot, tx), "marked stale by source");
+    assert.equal(staleReasonLabel(snapshot, txZh), "额度来源标记为过期");
+  });
+});
+
+describe("Codex reset credit helpers", () => {
+  const now = Date.parse("2026-09-12T00:00:00.000Z");
+  const credits = [
+    {
+      resetType: "codexRateLimits",
+      status: "available",
+      expiresAt: "2026-09-15T00:00:00.000Z"
+    },
+    {
+      resetType: "codexRateLimits",
+      status: "available",
+      expiresAt: "2026-09-13T00:00:00.000Z"
+    },
+    {
+      resetType: "codexRateLimits",
+      status: "used",
+      expiresAt: "2026-09-14T00:00:00.000Z"
+    },
+    {
+      resetType: "codexRateLimits",
+      status: "available",
+      expiresAt: "2026-09-01T00:00:00.000Z"
+    }
+  ];
+
+  it("normalizes reminder preferences", () => {
+    assert.deepEqual(
+      normalizeCodexResetCreditReminderPreferences({
+        enabled: true,
+        daysBefore: 99
+      }),
+      { enabled: true, daysBefore: [30] }
+    );
+    assert.deepEqual(
+      normalizeCodexResetCreditReminderPreferences({
+        enabled: true,
+        daysBefore: [3, "1", 3, 99]
+      }),
+      { enabled: true, daysBefore: [1, 3, 30] }
+    );
+  });
+
+  it("sorts only future available reset credits", () => {
+    assert.deepEqual(
+      availableCodexResetCredits(credits, now).map((credit) => credit.expiresAt),
+      ["2026-09-13T00:00:00.000Z", "2026-09-15T00:00:00.000Z"]
+    );
+  });
+
+  it("reports when the next reset credit is inside the reminder window", () => {
+    const reminder = codexResetCreditReminderState(
+      credits,
+      { enabled: true, daysBefore: [1, 3] },
+      now
+    );
+
+    assert.equal(reminder.count, 2);
+    assert.equal(reminder.daysUntilNext, 1);
+    assert.equal(reminder.withinReminder, true);
+  });
+
+  it("does not warn for reset credits outside all selected reminder windows", () => {
+    const reminder = codexResetCreditReminderState(
+      credits,
+      { enabled: true, daysBefore: [1] },
+      Date.parse("2026-09-11T00:00:00.000Z")
+    );
+
+    assert.equal(reminder.withinReminder, false);
+  });
+});
+
+describe("agentSubscriptionTier", () => {
+  it("uses the agent-level tier before looking at quota labels", () => {
+    assert.equal(
+      agentSubscriptionTier({
+        subscriptionTier: "Pro"
+      }),
+      "Pro"
+    );
+  });
+
+  it("extracts a compact tier label from Codex plan labels", () => {
+    assert.equal(
+      agentSubscriptionTier({
+        primarySnapshot: {
+          planLabel: "codex prolite"
+        },
+        snapshots: []
+      }),
+      "Pro Lite"
+    );
+  });
+
+  it("does not treat generic source labels as subscription tiers", () => {
+    assert.equal(
+      agentSubscriptionTier({
+        primarySnapshot: {
+          planLabel: "Claude Desktop usage history"
+        },
+        snapshots: [
+          {
+            planLabel: "Codex weekly quota"
+          }
+        ]
+      }),
+      undefined
+    );
+  });
+});
+
+describe("readinessDisplayName", () => {
+  it("translates known display names only in Chinese", () => {
+    assert.equal(readinessDisplayName({ displayName: "Mode" }, "en"), "Mode");
+    assert.equal(readinessDisplayName({ displayName: "Mode" }, "zh"), "模式");
   });
 });

@@ -48,7 +48,8 @@ export type SnapshotFreshnessStatus = "fresh" | "stale";
 export type SnapshotFreshnessReason =
   | "fresh"
   | "source_marked_stale"
-  | "expired";
+  | "expired"
+  | "too_old";
 
 export type SnapshotFreshness = {
   status: SnapshotFreshnessStatus;
@@ -79,6 +80,19 @@ export type QuotaSnapshot = {
   confidence: ConfidenceLevel;
   stale: boolean;
   rawSourceRef?: string;
+};
+
+export type CodexResetCredit = {
+  provider: "openai";
+  agent: "codex";
+  resetType: "codexRateLimits";
+  title: string;
+  status: "available";
+  grantedAt?: string;
+  expiresAt: string;
+  observedAt: string;
+  source: SourceKind;
+  confidence: ConfidenceLevel;
 };
 
 export type QuotaSnapshotView = QuotaSnapshot & {
@@ -129,12 +143,14 @@ export type AgentSummary = {
   agent: AgentId;
   displayName: string;
   shortName: string;
+  subscriptionTier?: string;
   status: QuotaStatus;
   emptyState?: AgentEmptyState;
   primarySnapshot?: QuotaSnapshotView;
   snapshots: QuotaSnapshotView[];
   doctorStatus: DoctorStatus;
   lastObservedAt?: string;
+  resetCredits?: CodexResetCredit[];
 };
 
 export type AgentEmptyStateReason =
