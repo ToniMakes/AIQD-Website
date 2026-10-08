@@ -1,23 +1,25 @@
 # AIQD Website
 
-Public download and product page for [AI Agent Quota Dashboard](https://github.com/ToniMakes/ai-agent-quota-dashboard).
+Public product and download page for [AI Agent Quota Dashboard](https://github.com/ToniMakes/ai-agent-quota-dashboard).
 
 Live site: <https://aiqd.tonimakes.com>
 
-Current public release: `v0.1.0`, an unsigned Windows x64 preview. Users should verify the SHA256 shown on the GitHub Release before running the installer.
+The site explains what the current Windows preview does, links to the software release, and shows sanitized product screenshots. It is a dependency-free HTML, CSS, and JavaScript page. The page does not receive quota data from the desktop app.
 
-The site is a small dependency-free HTML/CSS/JavaScript page. The download buttons point to the latest GitHub Release; the Windows installer and its SHA256 checksum are published in the software repository rather than copied into this website repository.
+## Public content
 
-Public-content rule: keep this repository limited to product copy, sanitized demo screenshots, and public release links. Do not add account data, local paths, raw logs, prompts, source code, credentials, cookies, tokens, or private deployment details.
+Keep this repository limited to product copy, sanitized demo screenshots, and public release information. Do not add account data, local paths, raw logs, prompts, source code, credentials, cookies, tokens, or private deployment details.
 
-## Local build
+The optional website feedback form sends a visitor's message and email address to the feedback service only when they submit it. Do not describe this website behavior as part of the desktop app's local data flow.
+
+## Build locally
 
 ```bash
 npm run build
 ```
 
-The build emits a Cloudflare Worker bundle in `dist/server/index.js`. Deployment metadata lives in `.openai/hosting.json`.
+The build emits the Cloudflare Worker bundle in `dist/server/index.js`. Deployment metadata is in `.openai/hosting.json`.
 
-## Release updates
+## Keep release information current
 
-When the software release changes, update the visible version and published installer SHA256 in `index.html`, run the build, and publish the website through the existing Sites project. Keep the download buttons pointed at the GitHub `releases/latest` URL so future releases do not require changing the link.
+When the software release changes, review the version, installer SHA256, and signature status shown in `index.html` against the software repository's latest release. Update the page copy and sanitized screenshots when necessary, then run the local build. Keep download buttons pointed at the GitHub `releases/latest` URL.

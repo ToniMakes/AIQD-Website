@@ -7,14 +7,14 @@
     <meta
       id="meta-description"
       name="description"
-      content="A local-first desktop quota dashboard for Codex, Claude Desktop, and Claude Code."
-      data-i18n-content-en="A local-first desktop quota dashboard for Codex, Claude Desktop, and Claude Code."
-      data-i18n-content-zh="一个本地优先的桌面额度看板，用于查看 Codex、Claude Desktop 和 Claude Code 的剩余额度。"
+      content="See remaining quota and reported reset times for supported AI coding tools in a local Windows dashboard."
+      data-i18n-content-en="See remaining quota and reported reset times for supported AI coding tools in a local Windows dashboard."
+      data-i18n-content-zh="在本地 Windows 仪表盘查看受支持 AI 编程工具的剩余额度和来源提供的重置时间。"
     />
     <meta property="og:title" content="AI Agent Quota Dashboard" />
     <meta
       property="og:description"
-      content="See remaining AI coding-agent quota, reset timing, and local source readiness at a glance."
+      content="See remaining quota and reported reset times for supported AI coding tools in one local dashboard."
     />
     <meta
       property="og:image"
@@ -65,9 +65,9 @@
         <img
           class="hero-image"
           src="./assets/screenshots/dashboard-demo.png?v=20260916"
-          alt="AI Agent Quota Dashboard showing Codex and Claude quota cards"
-          data-i18n-alt-en="AI Agent Quota Dashboard showing Codex and Claude quota cards"
-          data-i18n-alt-zh="AI Agent Quota Dashboard 显示 Codex 和 Claude 额度卡片"
+          alt="AIQD dashboard with demo quota readings for Codex and Claude"
+          data-i18n-alt-en="AIQD dashboard with demo quota readings for Codex and Claude"
+          data-i18n-alt-zh="AIQD 仪表盘，显示 Codex 和 Claude 的演示额度数据"
         />
         <div class="hero-overlay" aria-hidden="true"></div>
         <div class="hero-content">
@@ -79,11 +79,12 @@
           <h1 id="hero-title">AI Agent Quota Dashboard</h1>
           <p
             class="lede"
-            data-i18n-en="Local quota dashboard for Codex and Claude. See what is left, when it resets, and whether the local source is ready."
-            data-i18n-zh="面向 Codex 和 Claude 的本地额度看板。一眼看清还剩多少、什么时候重置，以及本地数据源是否就绪。"
+            data-i18n-en="See remaining quota and reported reset times for Codex and Claude in one local dashboard. AIQD reads supported usage data already available on your device."
+            data-i18n-zh="在一个本地仪表盘查看 Codex 和 Claude 的剩余额度及来源报告的重置时间。AIQD 读取设备上已有的受支持用量数据。"
           >
-            Local quota dashboard for Codex and Claude. See what is left, when
-            it resets, and whether the local source is ready.
+            See remaining quota and reported reset times for Codex and Claude
+            in one local dashboard. AIQD reads supported usage data already
+            available on your device.
           </p>
           <div class="hero-actions">
             <a
@@ -101,10 +102,11 @@
           </div>
           <p
             class="release-note"
-            data-i18n-en="Windows x64 desktop preview. Download from GitHub Releases."
-            data-i18n-zh="Windows x64 桌面预览版。通过 GitHub Releases 下载。"
+            data-i18n-en="Windows x64 preview. Browser-only accounts are not supported, and some sources do not report a reset time."
+            data-i18n-zh="Windows x64 预览版。目前不支持仅在浏览器中使用的账号；部分数据来源不会提供重置时间。"
           >
-            Windows x64 desktop preview. Download from GitHub Releases.
+            Windows x64 preview. Browser-only accounts are not supported, and
+            some sources do not report a reset time.
           </p>
         </div>
       </section>
@@ -118,17 +120,17 @@
           >Built for long AI coding days</p>
           <h2
             id="what-it-is"
-            data-i18n-en="Know whether you can keep going before the next agent run."
-            data-i18n-zh="开始下一轮 Agent 任务前，先知道额度还够不够。"
-          >Know whether you can keep going before the next agent run.</h2>
+            data-i18n-en="Check what is available before your next run."
+            data-i18n-zh="开始下一轮任务前，先查看剩余额度。"
+          >Check what is available before your next run.</h2>
         </div>
         <p
-          data-i18n-en="AIQD turns scattered Codex and Claude usage signals into a calm desktop view: remaining quota, reset timing when available, and clear guidance when something needs attention."
-          data-i18n-zh="AIQD 把 Codex 和 Claude 里分散的额度信息，整理成一个安静的桌面视图：剩余额度、可用时的恢复时间，以及需要处理时的清楚提示。"
+          data-i18n-en="See remaining quota, the last recorded time, and the next step when a local source needs attention. Reset times appear only when the source reports one."
+          data-i18n-zh="查看剩余额度、来源最后记录的时间，以及数据来源需要处理时的下一步。只有来源提供重置时间时，AIQD 才会显示。"
         >
-          AIQD turns scattered Codex and Claude usage signals into a calm
-          desktop view: remaining quota, reset timing when available, and clear
-          guidance when something needs attention.
+          See remaining quota, the last recorded time, and the next step when
+          a local source needs attention. Reset times appear only when the
+          source reports one.
         </p>
       </section>
 
@@ -141,43 +143,44 @@
         <article class="source-card">
           <span class="source-mark openai"></span>
           <h3
-            data-i18n-en="Stop guessing your quota"
-            data-i18n-zh="不再靠猜额度"
-          >Stop guessing your quota</h3>
+            data-i18n-en="See what is left"
+            data-i18n-zh="查看剩余额度"
+          >See what is left</h3>
           <p
-            data-i18n-en="See Codex and Claude side by side, so you know when to keep building and when to pause before the next reset."
-            data-i18n-zh="把 Codex 和 Claude 放在同一个视图里，什么时候继续推进、什么时候等下一次恢复，一眼就能判断。"
+            data-i18n-en="Compare supported Codex and Claude readings in one place, with a clear label when a source has no recent data."
+            data-i18n-zh="在同一处查看受支持的 Codex 和 Claude 用量；数据较旧或暂不可用时也会明确标出。"
           >
-            See Codex and Claude side by side, so you know when to keep
-            building and when to pause before the next reset.
+            Compare supported Codex and Claude readings in one place, with a
+            clear label when a source has no recent data.
           </p>
         </article>
         <article class="source-card">
           <span class="source-mark claude"></span>
           <h3
-            data-i18n-en="Made for daily flow"
-            data-i18n-zh="贴近日常工作流"
-          >Made for daily flow</h3>
+            data-i18n-en="Quick to check"
+            data-i18n-zh="随手查看"
+          >Quick to check</h3>
           <p
-            data-i18n-en="Open the dashboard for the full picture, check the tray panel quickly, or keep the compact widget nearby while you work."
-            data-i18n-zh="需要细看时打开主仪表盘；平时用托盘小面板快速确认，也可以把小组件放在桌面边上。"
+            data-i18n-en="Use the dashboard for details, the tray panel for a quick check, or keep the optional widget nearby."
+            data-i18n-zh="需要细看时打开仪表盘；平时可通过托盘面板快速查看，也可以使用可选桌面小组件。"
           >
-            Open the dashboard for the full picture, check the tray panel
-            quickly, or keep the compact widget nearby while you work.
+            Use the dashboard for details, the tray panel for a quick check,
+            or keep the optional widget nearby.
           </p>
         </article>
         <article class="source-card">
           <span class="source-mark terminal"></span>
           <h3
-            data-i18n-en="Private by default"
-            data-i18n-zh="默认守住隐私边界"
-          >Private by default</h3>
+            data-i18n-en="Quota data stays local"
+            data-i18n-zh="额度数据保留在本机"
+          >Quota data stays local</h3>
           <p
-            data-i18n-en="AIQD focuses on quota signals only. It does not upload your prompts, replies, source code, chat content, cookies, or passwords."
-            data-i18n-zh="AIQD 只关注额度信号，不上传 prompt、回复内容、源代码、聊天内容、cookie 或密码。"
+            data-i18n-en="The desktop app stores quota readings on your device. It does not collect passwords or browser cookies, or upload prompts, replies, code, or chat content."
+            data-i18n-zh="桌面应用会在本机保存额度数据，不会收集密码或浏览器 Cookie，也不会上传提示词、回复、代码或聊天内容。"
           >
-            AIQD focuses on quota signals only. It does not upload your
-            prompts, replies, source code, chat content, cookies, or passwords.
+            The desktop app stores quota readings on your device. It does not
+            collect passwords or browser cookies, or upload prompts, replies,
+            code, or chat content.
           </p>
         </article>
       </section>
@@ -186,36 +189,36 @@
         <div>
           <p
             class="eyebrow"
-            data-i18n-en="Privacy boundary"
-            data-i18n-zh="隐私边界"
-          >Privacy boundary</p>
+            data-i18n-en="Desktop app privacy"
+            data-i18n-zh="桌面应用的数据范围"
+          >Desktop app privacy</p>
           <h2
             id="privacy-title"
-            data-i18n-en="No prompts, code, cookies, or passwords."
-            data-i18n-zh="不读取 prompt、代码、cookie 或密码。"
-          >No prompts, code, cookies, or passwords.</h2>
+            data-i18n-en="Quota readings stay on your device."
+            data-i18n-zh="额度数据保留在你的设备上。"
+          >Quota readings stay on your device.</h2>
         </div>
         <ul class="privacy-list">
           <li
-            data-i18n-en="Runs locally and serves the dashboard through localhost."
-            data-i18n-zh="在本机运行，并通过 localhost 提供仪表盘。"
-          >Runs locally and serves the dashboard through localhost.</li>
+            data-i18n-en="The desktop app runs locally and serves its dashboard through 127.0.0.1."
+            data-i18n-zh="桌面应用在本机运行，并通过 127.0.0.1 提供仪表盘。"
+          >The desktop app runs locally and serves its dashboard through 127.0.0.1.</li>
           <li
-            data-i18n-en="Stores normalized quota snapshots in local SQLite."
-            data-i18n-zh="把标准化后的额度快照存到本地 SQLite。"
-          >Stores normalized quota snapshots in local SQLite.</li>
+            data-i18n-en="Stores supported quota readings and refresh history on your device."
+            data-i18n-zh="在本机保存受支持的额度数据和刷新记录。"
+          >Stores supported quota readings and refresh history on your device.</li>
           <li
-            data-i18n-en="Does not upload prompts, responses, source code, or chat content."
-            data-i18n-zh="不会上传 prompt、回复内容、源代码或聊天内容。"
-          >Does not upload prompts, responses, source code, or chat content.</li>
+            data-i18n-en="Does not upload prompts, responses, source code, or chat content from the desktop app."
+            data-i18n-zh="桌面应用不会上传提示词、回复、源代码或聊天内容。"
+          >Does not upload prompts, responses, source code, or chat content from the desktop app.</li>
           <li
-            data-i18n-en="Does not read browser cookies, simulate login, or call hidden APIs."
-            data-i18n-zh="不读取浏览器 cookie，不模拟登录，也不调用隐藏 API。"
-          >Does not read browser cookies, simulate login, or call hidden APIs.</li>
+            data-i18n-en="Does not read browser cookies, sign in to accounts, or call private provider APIs."
+            data-i18n-zh="不会读取浏览器 Cookie、登录账号或调用服务商的私有 API。"
+          >Does not read browser cookies, sign in to accounts, or call private provider APIs.</li>
           <li
-            data-i18n-en="Feedback is only sent to FeedbackPort when you choose to submit it, along with the email address you provide."
-            data-i18n-zh="只有你主动提交反馈时，反馈内容和你填写的邮箱才会发送到 FeedbackPort。"
-          >Feedback is only sent to FeedbackPort when you choose to submit it, along with the email address you provide.</li>
+            data-i18n-en="The separate website feedback form sends the details and email address you choose to provide only when you submit it."
+            data-i18n-zh="单独的官网反馈表单只会在你主动提交时，发送你填写的反馈内容和邮箱地址。"
+          >The separate website feedback form sends the details and email address you choose to provide only when you submit it.</li>
         </ul>
       </section>
 
@@ -228,18 +231,18 @@
           >Product screenshots</p>
           <h2
             id="screenshots-title"
-            data-i18n-en="Everything important, visible at a glance."
-            data-i18n-zh="重要状态，一眼看清。"
-          >Everything important, visible at a glance.</h2>
+            data-i18n-en="Quota, source, and setup at a glance."
+            data-i18n-zh="额度、数据来源和设置状态，一眼看清。"
+          >Quota, source, and setup at a glance.</h2>
         </div>
         <div class="screenshot-grid">
           <div class="screenshot-column">
             <figure class="screenshot-card featured">
               <img
                 src="./assets/screenshots/dashboard-demo.png?v=20260916"
-                alt="Main AIQD dashboard with Codex and Claude quota cards"
-                data-i18n-alt-en="Main AIQD dashboard with Codex and Claude quota cards"
-                data-i18n-alt-zh="AIQD 主仪表盘，显示 Codex 和 Claude 额度卡片"
+                alt="AIQD dashboard with demo quota readings for Codex and Claude"
+                data-i18n-alt-en="AIQD dashboard with demo quota readings for Codex and Claude"
+                data-i18n-alt-zh="AIQD 仪表盘，显示 Codex 和 Claude 的演示额度数据"
               />
               <figcaption data-i18n-en="Main dashboard" data-i18n-zh="主仪表盘">Main dashboard</figcaption>
             </figure>
@@ -251,19 +254,19 @@
             >
               <p
                 class="eyebrow"
-                data-i18n-en="Made to stay quiet"
-                data-i18n-zh="安静陪跑"
-              >Made to stay quiet</p>
+                data-i18n-en="Know what the reading means"
+                data-i18n-zh="看懂每条额度数据"
+              >Know what the reading means</p>
               <strong
-                data-i18n-en="Plan longer AI sessions without watching the clock."
-                data-i18n-zh="不用盯着时间，也能安排更长的 AI 工作。"
-              >Plan longer AI sessions without watching the clock.</strong>
+                data-i18n-en="See the source and last recorded time."
+                data-i18n-zh="同时查看数据来源和最后记录时间。"
+              >See the source and last recorded time.</strong>
               <p
-                data-i18n-en="AIQD gives quota checks a dedicated home, so your coding tools can stay focused on the work."
-                data-i18n-zh="AIQD 给额度状态一个专门的位置，让你的编程工具继续专心处理真正的任务。"
+                data-i18n-en="A refresh checks local files; a new quota reading appears only after the source records one."
+                data-i18n-zh="刷新会检查本地数据；只有来源记录了新的额度信息，页面才会出现新数据。"
               >
-                AIQD gives quota checks a dedicated home, so your coding tools
-                can stay focused on the work.
+                A refresh checks local files; a new quota reading appears only
+                after the source records one.
               </p>
             </div>
           </div>
@@ -271,9 +274,9 @@
             <figure class="screenshot-card">
               <img
                 src="./assets/screenshots/settings-demo.png?v=20260916"
-                alt="AIQD settings page showing real quota setup steps"
-                data-i18n-alt-en="AIQD settings page showing real quota setup steps"
-                data-i18n-alt-zh="AIQD 设置页面，显示真实额度接入步骤"
+                alt="AIQD settings page showing local data source setup steps"
+                data-i18n-alt-en="AIQD settings page showing local data source setup steps"
+                data-i18n-alt-zh="AIQD 设置页面，显示本地数据来源的连接步骤"
               />
               <figcaption data-i18n-en="First-run setup" data-i18n-zh="首次设置">First-run setup</figcaption>
             </figure>
@@ -295,15 +298,16 @@
           <p class="eyebrow" data-i18n-en="Download" data-i18n-zh="下载">Download</p>
           <h2
             id="download-title"
-            data-i18n-en="Start with the Windows preview."
-            data-i18n-zh="先从 Windows 预览版开始。"
-          >Start with the Windows preview.</h2>
+            data-i18n-en="Install the Windows preview."
+            data-i18n-zh="安装 Windows 预览版。"
+          >Install the Windows preview.</h2>
           <p
-            data-i18n-en="Download from GitHub Releases, install the app, then open the local dashboard from the desktop shortcut."
-            data-i18n-zh="从 GitHub Releases 下载并安装，然后通过桌面快捷方式打开本地仪表盘。"
+            data-i18n-en="Download the installer from GitHub Releases, run it, then open AIQD from the desktop shortcut. Follow the first-run guide to connect the sources you use."
+            data-i18n-zh="从 GitHub Releases 下载并运行安装程序，然后通过桌面快捷方式打开 AIQD。按首次使用指引连接你使用的数据来源。"
           >
-            Download from GitHub Releases, install the app, then open the
-            local dashboard from the desktop shortcut.
+            Download the installer from GitHub Releases, run it, then open
+            AIQD from the desktop shortcut. Follow the first-run guide to
+            connect the sources you use.
           </p>
         </div>
         <a
@@ -330,9 +334,9 @@
             <span class="item-label" data-i18n-en="Current version" data-i18n-zh="当前版本">Current version</span>
             <strong>v0.1.0</strong>
             <p
-              data-i18n-en="Installer-first desktop preview for early testers."
-              data-i18n-zh="面向早期测试用户的安装器优先桌面预览版。"
-            >Installer-first desktop preview for early testers.</p>
+              data-i18n-en="Windows x64 desktop preview. Use the release page for current download and verification details."
+              data-i18n-zh="Windows x64 桌面预览版。当前下载和校验信息以 Release 页面为准。"
+            >Windows x64 desktop preview. Use the release page for current download and verification details.</p>
           </div>
           <div class="release-detail-item checksum">
             <span class="item-label" data-i18n-en="Windows SHA256" data-i18n-zh="Windows SHA256">Windows SHA256</span>
