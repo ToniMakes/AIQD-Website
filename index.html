@@ -48,6 +48,7 @@
         <a href="#privacy" data-i18n-en="Privacy" data-i18n-zh="隐私">Privacy</a>
         <a href="#screenshots" data-i18n-en="Screenshots" data-i18n-zh="截图">Screenshots</a>
         <a href="https://github.com/ToniMakes/ai-agent-quota-dashboard">GitHub</a>
+        <a href="https://aiqd.board.fp-staging.tonimakes.com/board">Feedback</a>
         <button
           id="language-toggle"
           class="language-toggle"
@@ -211,6 +212,10 @@
             data-i18n-en="Does not read browser cookies, simulate login, or call hidden APIs."
             data-i18n-zh="不读取浏览器 cookie，不模拟登录，也不调用隐藏 API。"
           >Does not read browser cookies, simulate login, or call hidden APIs.</li>
+          <li
+            data-i18n-en="Feedback is only sent to FeedbackPort when you choose to submit it, along with the email address you provide."
+            data-i18n-zh="只有你主动提交反馈时，反馈内容和你填写的邮箱才会发送到 FeedbackPort。"
+          >Feedback is only sent to FeedbackPort when you choose to submit it, along with the email address you provide.</li>
         </ul>
       </section>
 
@@ -358,6 +363,13 @@
         data-i18n-zh="代码签名"
       >Code signing</a>
     </footer>
+    <script
+      src="https://fp-staging.tonimakes.com/widget.js"
+      data-api-base="https://fp-staging.tonimakes.com"
+      data-product="aiqd"
+      data-turnstile-site-key="0x4AAAAAAFQg8k1u2_WrDlgk"
+      async
+    ></script>
     <script src="./app.js" type="module"></script>
   </body>
 </html>
