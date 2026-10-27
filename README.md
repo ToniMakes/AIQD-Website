@@ -8,7 +8,7 @@ The site explains what the current Windows preview does, links to the software r
 
 ## Public content
 
-Keep this repository limited to product copy, sanitized demo screenshots, and public release information. Do not add account data, local paths, raw logs, prompts, source code, credentials, cookies, tokens, or private deployment details.
+This repository contains the website source, its aggregate analytics collector and owner dashboard, database migrations, tests, product copy, sanitized demo screenshots, and public release information. Do not add real account data, private local paths, raw logs, prompts, private user source code, credentials, cookies, tokens, database dumps, or private deployment details.
 
 The optional website feedback form sends a visitor's message and email address to the feedback service only when they submit it. Do not describe this website behavior as part of the desktop app's local data flow.
 
@@ -54,12 +54,50 @@ backfill. The click ratio is event clicks / page views, not unique-user conversi
 
 ## Build locally
 
+Use Node.js 24 or newer (the tests and local preview use its built-in SQLite).
+There are no npm dependencies to install.
+
 ```bash
+npm test
 npm run build
+node scripts/preview.mjs
 ```
 
 The build emits the Cloudflare Worker bundle in `dist/server/index.js`. Deployment metadata is in `.openai/hosting.json`.
 
+The preview serves `http://127.0.0.1:4173` with an in-memory database. Its
+`/analytics` page simulates an owner identity only on the local preview server;
+that adapter is never included in the deployed Worker. Preview data is discarded
+when the process stops. Production identity headers must be supplied and protected
+by the hosting platform; do not expose the Worker directly behind an untrusted
+proxy that lets visitors supply those headers.
+
+## Source layout and deployment
+
+- `index.html`, `styles.css`, `app.js`: public product page and language switching.
+- `analytics.js`: browser events and opt-out control.
+- `analytics-worker.js`: event validation, aggregate storage, and owner authorization.
+- `analytics.html`, `analytics-dashboard.js`: owner-only statistics interface.
+- `drizzle/`: schema migrations, not production statistics.
+- `tests/analytics.test.mjs`: SQL, authorization, and privacy behavior tests.
+
+The public source code does not grant access to the deployed dashboard or data.
+The owner's email is a runtime secret; actual counts remain in the hosted D1
+database. The MIT license covers this repository's implementation, including
+analytics. The external feedback widget and hosting platform are separate services
+and are not distributed by this repository.
+
+When deploying a fork with Sites, replace `.openai/hosting.json`'s `project_id`
+with the ID of your own Site, keep the `DB` binding, and configure your own
+`ANALYTICS_OWNER_EMAIL` runtime secret. Do not reuse the original Site identity.
+Other Cloudflare hosting requires a D1 binding, the SQL migration, and a trusted
+authentication layer; a build alone does not configure production authentication.
+
 ## Keep release information current
 
 When the software release changes, review the version, installer SHA256, and signature status shown in `index.html` against the software repository's latest release. Update the page copy and sanitized screenshots when necessary, then run the local build. Keep download buttons pointed at the GitHub `releases/latest` URL.
+
+## License
+
+[MIT](LICENSE). The desktop application's source is maintained in its
+[separate repository](https://github.com/ToniMakes/ai-agent-quota-dashboard).
