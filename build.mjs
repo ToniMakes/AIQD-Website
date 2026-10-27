@@ -16,7 +16,7 @@ const mimeTypes = new Map([
 await rm(distRoot, { force: true, recursive: true });
 await mkdir(serverRoot, { recursive: true });
 
-const assetPaths = ["index.html", "styles.css", "app.js"];
+const assetPaths = ["index.html", "styles.css", "app.js", "analytics.js", "analytics.html", "analytics-dashboard.js"];
 assetPaths.push(...(await listFiles(join(siteRoot, "assets"))));
 
 const assets = {};
@@ -36,7 +36,8 @@ for (const assetPath of assetPaths) {
 
 assets["/"] = assets["/index.html"];
 
-const workerSource = `const assets = ${JSON.stringify(assets, null, 2)};
+const analyticsWorker = await readFile(join(siteRoot, "analytics-worker.js"), "utf8");
+const workerSource = `${analyticsWorker}\nconst assets = ${JSON.stringify(assets, null, 2)};
 
 const securityHeaders = {
   "Referrer-Policy": "strict-origin-when-cross-origin",
@@ -44,10 +45,12 @@ const securityHeaders = {
 };
 
 export default {
-  async fetch(request) {
+  async fetch(request, env) {
     const url = new URL(request.url);
+    const analyticsResponse = await handleAnalytics(request, env);
+    if (analyticsResponse) return analyticsResponse;
     const pathname = normalizePathname(url.pathname);
-    const asset = assets[pathname];
+    const asset = assets[pathname === "/analytics" ? "/analytics.html" : pathname];
 
     if (!asset) {
       return new Response("Not found", {
@@ -62,7 +65,7 @@ export default {
     return new Response(base64ToBytes(asset.body), {
       headers: {
         ...securityHeaders,
-        "Cache-Control": cacheControl(pathname),
+        "Cache-Control": pathname.startsWith("/analytics") ? "no-store" : cacheControl(pathname),
         "Content-Type": asset.contentType
       },
       status: 200

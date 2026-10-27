@@ -47,8 +47,8 @@
       >
         <a href="#privacy" data-i18n-en="Privacy" data-i18n-zh="隐私">Privacy</a>
         <a href="#screenshots" data-i18n-en="Screenshots" data-i18n-zh="截图">Screenshots</a>
-        <a href="https://github.com/ToniMakes/ai-agent-quota-dashboard">GitHub</a>
-        <a href="https://aiqd.board.fp-staging.tonimakes.com/board">Feedback</a>
+        <a href="https://github.com/ToniMakes/ai-agent-quota-dashboard" data-analytics-event="source_click" data-analytics-placement="navigation">GitHub</a>
+        <a href="https://aiqd.board.fp-staging.tonimakes.com/board" data-analytics-event="feedback_click" data-analytics-placement="navigation">Feedback</a>
         <button
           id="language-toggle"
           class="language-toggle"
@@ -90,12 +90,16 @@
             <a
               class="button primary"
               href="https://github.com/ToniMakes/ai-agent-quota-dashboard/releases/latest"
+              data-analytics-event="download_click"
+              data-analytics-placement="top"
               data-i18n-en="Download for Windows"
               data-i18n-zh="下载 Windows 版"
             >Download for Windows</a>
             <a
               class="button secondary"
               href="https://github.com/ToniMakes/ai-agent-quota-dashboard"
+              data-analytics-event="source_click"
+              data-analytics-placement="hero"
               data-i18n-en="View Source"
               data-i18n-zh="查看源码"
             >View Source</a>
@@ -219,6 +223,14 @@
             data-i18n-en="The separate website feedback form sends the details and email address you choose to provide only when you submit it."
             data-i18n-zh="单独的官网反馈表单只会在你主动提交时，发送你填写的反馈内容和邮箱地址。"
           >The separate website feedback form sends the details and email address you choose to provide only when you submit it.</li>
+          <li
+            data-i18n-en="This website counts page views and link clicks by broad source category, button position and language. It stores no visitor IDs, IP addresses or full referrer URLs in its analytics database. Hosting services still process network information. Website statistics do not include desktop app activity."
+            data-i18n-zh="本网站按来源类别、按钮位置和语言汇总访问及链接点击次数，统计数据库不保存访客标识、IP 或完整来源网址；托管服务仍会处理网络请求信息。网站统计不包含桌面应用的使用情况。"
+          >This website counts page views and link clicks by broad source category, button position and language. It stores no visitor IDs, IP addresses or full referrer URLs in its analytics database. Hosting services still process network information. Website statistics do not include desktop app activity.</li>
+          <li
+            data-i18n-en="You can disable website statistics using the footer control. Do Not Track and Global Privacy Control are respected. Disabling statistics does not remove previously aggregated counts."
+            data-i18n-zh="可通过页脚开关关闭网站统计；网站也会遵循浏览器的 Do Not Track 和 Global Privacy Control。关闭统计不会删除此前已汇总的次数。"
+          >You can disable website statistics using the footer control. Do Not Track and Global Privacy Control are respected. Disabling statistics does not remove previously aggregated counts.</li>
         </ul>
       </section>
 
@@ -313,6 +325,8 @@
         <a
           class="button primary"
           href="https://github.com/ToniMakes/ai-agent-quota-dashboard/releases/latest"
+          data-analytics-event="download_click"
+          data-analytics-placement="bottom"
           data-i18n-en="Download for Windows"
           data-i18n-zh="下载 Windows 版"
         >Download for Windows</a>
@@ -355,6 +369,7 @@
     </main>
 
     <footer class="site-footer">
+      <button id="analytics-toggle" class="language-toggle" type="button">Website analytics</button>
       <span data-i18n-en="AI Agent Quota Dashboard by ToniMakes" data-i18n-zh="AI Agent Quota Dashboard by ToniMakes">AI Agent Quota Dashboard by ToniMakes</span>
       <a
         href="https://github.com/ToniMakes/ai-agent-quota-dashboard/blob/main/docs/privacy.md"
@@ -375,5 +390,6 @@
       async
     ></script>
     <script src="./app.js" type="module"></script>
+    <script src="./analytics.js" type="module"></script>
   </body>
 </html>

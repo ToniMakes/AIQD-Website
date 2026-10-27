@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="zh-Hans">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, nofollow"><title>AIQD · 官网统计</title>
+  <link rel="stylesheet" href="/styles.css">
+  <style>
+    main{max-width:1100px;margin:40px auto;padding:24px} .metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:16px;margin:24px 0}
+    .metric{border:1px solid #8886;border-radius:12px;padding:20px}.metric strong{display:block;font-size:2rem;margin-top:12px}
+    table{width:100%;border-collapse:collapse;margin:16px 0 32px}th,td{padding:12px;text-align:left;border-bottom:1px solid #8885}select,button{font:inherit;padding:8px} .table-wrap{overflow-x:auto}p{line-height:1.7}
+    h1{font-size:clamp(2rem,5vw,3rem);margin:16px 0;letter-spacing:-.03em}h2{font-size:1.5rem;margin-top:32px}.daily-wrap{max-height:420px;overflow:auto}.daily-wrap thead{position:sticky;top:0;background:#f7f8f3}
+  </style>
+</head>
+<body><main>
+  <a href="/">← AIQD 官网</a>
+  <h1>官网统计</h1>
+  <p>仅站点所有者可见 · 按 UTC 自然日汇总 · 数据自本次上线起累计</p>
+  <label for="days">时间范围</label> <select id="days"><option value="7">最近 7 天</option><option value="30" selected>最近 30 天</option><option value="90">最近 90 天</option></select>
+  <button id="refresh" type="button">刷新</button>
+  <p id="status" role="status">正在读取统计…</p>
+  <div id="metrics" class="metrics"></div>
+  <h2>每日记录</h2><div class="table-wrap daily-wrap" tabindex="0" role="region" aria-label="每日统计，可滚动"><table><thead><tr><th>日期（UTC）</th><th>访问次数</th><th>前往下载页</th><th>查看源码</th><th>打开反馈</th></tr></thead><tbody id="daily"></tbody></table></div>
+  <h2>来源渠道</h2><div class="table-wrap"><table><thead><tr><th>来源</th><th>访问次数</th><th>前往下载页</th></tr></thead><tbody id="sources"></tbody></table></div>
+  <h2>下载入口</h2><div class="table-wrap"><table><thead><tr><th>位置</th><th>点击次数</th></tr></thead><tbody id="placements"></tbody></table></div>
+  <p>访问次数包含重复访问；每次页面加载时，每个入口最多计一次点击。点击率是下载入口点击次数 ÷ 访问次数，可能超过 100%，不是用户转化率。前往 GitHub 发布页不代表下载完成或安装成功。关闭统计、隐私设置、广告拦截器和脚本禁用会导致少计，机器人过滤并不完整，这些数据适合观察趋势。</p>
+  <p>只保存日期、预定义事件、来源类别、按钮位置、界面语言和汇总次数，不保存 IP、完整来源网址或访客标识。托管平台仍会处理请求所需的网络信息。所有者登录后的访问不计入统计。</p>
+</main><script src="/analytics-dashboard.js" type="module"></script></body></html>
